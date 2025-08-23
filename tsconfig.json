@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "lib": ["ES2022"],
+    "declaration": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "incremental": true,
+    "composite": true
+  },
+  "files": [],
+  "references": [
+    { "path": "./packages/shared" },
+    { "path": "./packages/types" },
+    { "path": "./apps/caching" },
+    { "path": "./apps/session-store" },
+    { "path": "./apps/rate-limiter" },
+    { "path": "./apps/leaderboard" },
+    { "path": "./apps/pubsub" },
+    { "path": "./apps/job-queue" },
+    { "path": "./apps/analytics" },
+    { "path": "./apps/geospatial" },
+    { "path": "./apps/distributed-lock" },
+    { "path": "./apps/feature-flags" }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "name": "valkey-use-cases",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Demonstrates different ways to use ValKey for various use cases",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm -r dev",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "clean": "pnpm -r clean && rm -rf node_modules",
+    "type-check": "tsc --build"
+  },
+  "keywords": [
+    "valkey",
+    "nodejs",
+    "typescript",
+    "monorepo"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.0"
+}
