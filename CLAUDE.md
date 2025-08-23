@@ -29,13 +29,14 @@ This is a TypeScript monorepo using **pnpm workspaces** and **TypeScript project
 
 ```
 valkey-use-cases/
+├── docker-compose.yml   # ValKey container infrastructure
 ├── packages/
 │   ├── shared/          # Common ValKey utilities and client
 │   └── types/           # Shared TypeScript type definitions
 └── apps/
     ├── caching/
     ├── session-store/
-    ├── rate-limiter/    # Currently implemented
+    ├── rate-limiter/    # ✅ Implemented with sliding window rate limiting
     ├── leaderboard/
     ├── pubsub/
     ├── job-queue/
@@ -61,11 +62,10 @@ valkey-use-cases/
 - `pnpm lint` - Lint all packages
 - `pnpm clean` - Clean all build artifacts
 - `tsc --build` - Incremental TypeScript compilation
-
-### Working with Specific Apps
+- `pnpm docker:up` - Start ValKey container using Docker Compose
+- `pnpm docker:down` - Stop and remove ValKey container
+- `pnpm docker:logs` - Follow ValKey container logs
 - `pnpm --filter <app-name> <command>` - Run command in specific app
-- `pnpm --filter @valkey-use-cases/rate-limiter dev` - Start rate-limiter in dev mode
-- `pnpm --filter @valkey-use-cases/shared build` - Build only shared package
 
 ### Performance Features
 

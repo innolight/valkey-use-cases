@@ -9,7 +9,10 @@
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "clean": "pnpm -r clean && rm -rf node_modules",
-    "type-check": "tsc --build"
+    "type-check": "tsc --build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f valkey"
   },
   "keywords": [
     "valkey",
