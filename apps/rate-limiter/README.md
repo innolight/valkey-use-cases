@@ -2,13 +2,21 @@
 
 Express.js application demonstrating **sliding window rate limiting** using ValKey (Redis-compatible) for precise request throttling.
 
-## 🚀 Features
+## Design Considerations 🚀
 
-- **1 RPS Rate Limit**: Each client IP limited to 1 request per second
-- **Sliding Window Algorithm**: Precise time-based rate limiting using ValKey sorted sets
-- **HTTP 429 Responses**: Proper "Too Many Requests" error responses
-- **Rate Limit Headers**: `X-RateLimit-*` headers for client visibility
-- **Automatic Cleanup**: Expired request timestamps are automatically removed
+### Rate Limit Algorithms
+
+// TODO: explain different approaches and trade-offs for implementing rate limits
+
+### HTTP API
+
+- **HTTP 429 Status Code**: Response with "Too Many Requests" when rate limit applies.
+- **Provide Further Rate Limit Details**: two approaches (not mutually exclusive) a service can take
+  - **Rate Limit Headers Approach**: use `X-RateLimit-*` headers for client visibility
+    - `X-RateLimit-Limit`: The maximum number of requests that the client is allowed to make in this window.
+    - `X-RateLimit-Remaining`: The number of requests allowed in the current window.
+    - `X-RateLimit-Reset`: The relative time in seconds when the rate limit window will be reset. Beware that this is different to Github and Twitter’s usage of a header with the same name which is using UTC epoch seconds instead.
+  - **Retry-After Header Approach**: header indicating how long the client ought to wait before making a follow-up request. The Retry-After header can contain a HTTP date value to retry after or the number of seconds to delay. Either is acceptable but APIs should prefer to use a delay in seconds.
 
 ## 📋 Prerequisites
 
@@ -118,16 +126,6 @@ ZADD rate_limit:192.168.1.100 1692834001750 "1692834001750-0.456"
 2. ZCARD key                                 // Count current entries
 3. ZADD key now "<now>-<random>"                 // Add current request
 4. EXPIRE key windowSeconds                  // Set TTL for cleanup
-```
-
-## 📊 Implementation Details
-
-### Files Structure
-
-```
-src/
-├── index.ts         # Express server setup and routes
-└── rate-limiter.ts  # Sliding window rate limiter class
 ```
 
 ## ⚙️ Configuration
