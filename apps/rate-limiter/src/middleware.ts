@@ -23,14 +23,14 @@ export function createRateLimitMiddleware(
         res.status(429).json({
           error: 'Too Many Requests',
           message: 'Rate limit exceeded',
-          retryAfter: result.retryAfterSeconds
+          retryAfter: result.retryAfterSeconds,
         });
         return;
       }
 
       res.set({
         'X-RateLimit-Limit': result.requestLimit.toString(),
-        'X-RateLimit-Remaining': result.remainingRequests.toString()
+        'X-RateLimit-Remaining': result.remainingRequests.toString(),
       });
 
       next();

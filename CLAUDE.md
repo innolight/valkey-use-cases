@@ -55,17 +55,27 @@ valkey-use-cases/
 ## Development Commands
 
 ### Root Level Commands
+
 - `pnpm install` - Install all dependencies across the monorepo
 - `pnpm build` - Build all packages and apps with TypeScript project references
 - `pnpm dev` - Start development mode for all apps
 - `pnpm test` - Run tests across all packages
-- `pnpm lint` - Lint all packages
+- `pnpm lint` - Lint all packages with ESLint
+- `pnpm lint:fix` - Auto-fix linting issues across all packages
+- `pnpm format` - Format all code with Prettier
+- `pnpm format:check` - Check code formatting without making changes
 - `pnpm clean` - Clean all build artifacts
 - `tsc --build` - Incremental TypeScript compilation
 - `pnpm docker:up` - Start ValKey container using Docker Compose
 - `pnpm docker:down` - Stop and remove ValKey container
 - `pnpm docker:logs` - Follow ValKey container logs
 - `pnpm --filter <app-name> <command>` - Run command in specific app
+
+### Code Quality Commands
+
+- `pnpm --filter rate-limiter lint` - Lint specific package
+- `pnpm --filter shared format` - Format specific package
+- `pnpm --filter types lint:fix` - Auto-fix linting issues for specific package
 
 ### Performance Features
 
@@ -74,6 +84,22 @@ valkey-use-cases/
 - **Efficient dependency management**: pnpm's content-addressable storage reduces disk usage
 
 Each use case is implemented as a separate Node.js/Express application that can be developed, tested, and deployed independently while sharing common utilities.
+
+## Code Quality & Standards
+
+This project includes integrated ESLint and Prettier configuration for consistent code quality:
+
+- **ESLint**: Modern flat config with TypeScript support, Node.js globals, and Jest test environment
+- **Prettier**: Consistent formatting with 2-space indentation, single quotes, and trailing commas
+- **VS Code Integration**: Auto-format on save and recommended extensions
+- **Monorepo Support**: All commands work across packages and individual apps
+
+### Linting Rules
+
+- TypeScript strict mode with sensible defaults
+- Console statements generate warnings (not errors) for development flexibility
+- Unused variables prefixed with `_` are ignored
+- Test files have relaxed rules and Jest globals
 
 ## Design Guide
 

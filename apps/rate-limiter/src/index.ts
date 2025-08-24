@@ -10,33 +10,35 @@ app.use(express.json());
 
 const valkeyClient = ValkeyClient.getInstance();
 
-const rateLimiter = new SlidingWindowRateLimiter({
-  redis: valkeyClient,
-  windowMs: 1000,
-  requestLimit: 2
-});
-const rateLimitMiddleware = createRateLimitMiddleware(rateLimiter, IpAddressKeyGenerator);
+const slidingWindowRateLimitMiddleware = createRateLimitMiddleware(
+  new SlidingWindowRateLimiter({
+    redis: valkeyClient,
+    windowMs: 1000,
+    requestLimit: 2,
+  }),
+  IpAddressKeyGenerator
+);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'rate-limiter' });
 });
 
-app.get('/api/data', rateLimitMiddleware, (req, res) => {
+app.get('/api/data', slidingWindowRateLimitMiddleware, (req, res) => {
   res.json({
     message: 'Data retrieved successfully',
     timestamp: new Date().toISOString(),
-    clientIp: req.ip
+    clientIp: req.ip,
   });
 });
 
-app.get('/api/protected', rateLimitMiddleware, (req, res) => {
+app.get('/api/protected', slidingWindowRateLimitMiddleware, (req, res) => {
   res.json({
     message: 'This endpoint is rate limited to 1 request per second',
     timestamp: new Date().toISOString(),
     data: {
       id: Math.floor(Math.random() * 1000),
-      value: Math.random()
-    }
+      value: Math.random(),
+    },
   });
 });
 
@@ -48,7 +50,7 @@ async function startServer() {
   try {
     await valkeyClient.ping();
     console.log('Connected to Valkey');
-    
+
     app.listen(PORT, () => {
       console.log(`Rate Limiter API server running on port ${PORT}`);
       console.log(`Health check: http://localhost:${PORT}/health`);

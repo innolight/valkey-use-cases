@@ -24,7 +24,8 @@ export class SlidingWindowRateLimiter implements RateLimiter {
     const now = Date.now();
     const windowStart = now - windowMs;
 
-    const res = await this.redis.pipeline()
+    const res = await this.redis
+      .pipeline()
       .zremrangebyscore(key, 0, windowStart) // Remove expired requests (outside of the window)
       .zcard(key) // Get the current count of requests in the window
       .exec();
@@ -40,15 +41,16 @@ export class SlidingWindowRateLimiter implements RateLimiter {
         allowed: false,
         remainingRequests: 0,
         retryAfterSeconds: Math.ceil(windowMs / 1000),
-        requestLimit: reqLimit
+        requestLimit: reqLimit,
       };
     }
 
-    await this.redis.pipeline()
+    await this.redis
+      .pipeline()
       // Add the current request to the sliding window
       //    now is the sorting score
       //    set value has The random suffix prevents collisions when multiple requests arrive at the same millisecond
-      .zadd(key, now, `${now}${Math.floor(Math.random() * 1000)}`) 
+      .zadd(key, now, `${now}${Math.floor(Math.random() * 1000)}`)
       .expire(key, Math.ceil(windowMs / 1000)) // Set the expiration for the sliding window
       .exec();
 
@@ -56,7 +58,7 @@ export class SlidingWindowRateLimiter implements RateLimiter {
       allowed: true,
       remainingRequests: Math.max(0, reqLimit - currentCount - 1),
       retryAfterSeconds: Math.ceil(windowMs / 1000),
-      requestLimit: reqLimit
+      requestLimit: reqLimit,
     };
   }
 }

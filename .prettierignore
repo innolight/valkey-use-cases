@@ -1,0 +1,11 @@
+node_modules
+dist
+coverage
+*.tsbuildinfo
+apps/*/node_modules
+apps/*/dist
+apps/*/coverage
+packages/*/node_modules
+packages/*/dist
+pnpm-lock.yaml
+*.log
