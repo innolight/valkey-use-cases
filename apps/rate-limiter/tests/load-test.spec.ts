@@ -15,7 +15,7 @@ describe('Rate Limiter Load Test Verification', () => {
     const rateLimiter = new SlidingWindowRateLimiter({
       redis: valkeyClient,
       windowMs: 1000,
-      maxRequests: 2
+      requestLimit: 2
     });
     const rateLimitMiddleware = createRateLimitMiddleware(rateLimiter, IpAddressKeyGenerator);
 

@@ -4,7 +4,7 @@ import { RateLimiter, RateLimitResult } from '../models';
 interface SlidingWindowRateLimiterOptions {
   redis: Redis;
   windowMs: number;
-  maxRequests: number;
+  requestLimit: number;
 }
 
 export class SlidingWindowRateLimiter implements RateLimiter {
@@ -15,7 +15,7 @@ export class SlidingWindowRateLimiter implements RateLimiter {
   constructor(options: SlidingWindowRateLimiterOptions) {
     this.redis = options.redis;
     this.windowMs = options.windowMs;
-    this.reqLimit = options.maxRequests;
+    this.reqLimit = options.requestLimit;
   }
 
   async acquirePermit(key: string): Promise<RateLimitResult> {
