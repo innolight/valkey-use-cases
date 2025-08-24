@@ -45,15 +45,8 @@ pnpm --filter @valkey-use-cases/rate-limiter dev
 # 1. Health check (not rate limited)
 curl http://localhost:3003/health
 
-# 2. First request to protected endpoint (should succeed)
+# 2. Repeatedly fire a serie of requests
 curl -i http://localhost:3003/api/protected
-
-# 3. Immediate second request (should be rate limited)
-curl -i http://localhost:3003/api/protected
-
-# 4. Wait 1+ seconds, then retry (should succeed again)
-sleep 1
-curl -w "\nHTTP: %{http_code}\n" http://localhost:3003/api/protected
 ```
 
 ### Step 4: Testing
@@ -76,15 +69,9 @@ brew install vegeta
 pnpm --filter @valkey-use-cases/rate-limiter test:load
 
 # Or run directly with custom settings
-TARGET_URL=http://localhost:3003/api/protected RATE=5/1s DURATION=1s ./load-test.sh
+cd apps/rate-limiter && \
+    TARGET_URL=http://localhost:3003/api/protected RATE=5/1s DURATION=15s ./load-test.sh
 ```
-
-**What to Expect:**
-
-- **Unit Tests**: Core rate limiter logic validation
-- **Integration Tests**: API endpoint behavior verification
-- **Load Test Verification**: Automated 33.3% success rate validation
-- **Vegeta Load Test**: Real-time progress showing ~33% success rate
 
 ### Step 5: Cleanup
 
@@ -102,7 +89,7 @@ The rate limiter implements a **sliding window algorithm** using ValKey sorted s
 
 ```
 1. Extract client IP address from request
-2. Create unique ValKey key: `rate_limit:{client_ip}`
+2. Create unique ValKey key: `rate_limit:{key}`, key can be client_ip address
 3. Remove expired timestamps (older than window)
 4. Count current requests in the sliding window
 5. If count < limit: Allow request + add timestamp
@@ -129,7 +116,7 @@ ZADD rate_limit:192.168.1.100 1692834001750 "1692834001750-0.456"
 // ValKey commands executed atomically
 1. ZREMRANGEBYSCORE key 0 (now - windowMs)  // Remove old entries
 2. ZCARD key                                 // Count current entries
-3. ZADD key now "now-random"                 // Add current request
+3. ZADD key now "<now>-<random>"                 // Add current request
 4. EXPIRE key windowSeconds                  // Set TTL for cleanup
 ```
 
@@ -143,36 +130,12 @@ src/
 └── rate-limiter.ts  # Sliding window rate limiter class
 ```
 
-### Key Components
-
-**RateLimiter Class** (`src/rate-limiter.ts`)
-
-- Configurable window size and request limits
-- Client IP extraction and key generation
-- ValKey pipeline operations for atomicity
-- HTTP headers for client rate limit visibility
-
-**Express Server** (`src/index.ts`)
-
-- Health endpoint (not rate limited)
-- Protected endpoints with rate limiting
-- Graceful shutdown handling
-- ValKey connection management
-
 ## ⚙️ Configuration
 
 | Setting         | Value          | Description                |
 | --------------- | -------------- | -------------------------- |
 | **Port**        | 3003           | HTTP server port           |
-| **Rate Limit**  | 1 RPS          | Requests per second per IP |
+| **Rate Limit**  | 2 RPS          | Requests per second per IP |
 | **Window Size** | 1000ms         | Sliding window duration    |
 | **ValKey Host** | localhost:6379 | Database connection        |
 | **Key Prefix**  | `rate_limit:`  | ValKey key namespace       |
-
-## 🏗️ Architecture Benefits
-
-- **Precise**: Sliding window vs fixed window accuracy
-- **Scalable**: Horizontal scaling with shared ValKey instance
-- **Memory Efficient**: Automatic cleanup with TTL
-- **Observable**: Rate limit headers for debugging
-- **Resilient**: Graceful fallback on ValKey errors

@@ -33,7 +33,7 @@ app.get('/api/data', slidingWindowRateLimitMiddleware, (req, res) => {
 
 app.get('/api/protected', slidingWindowRateLimitMiddleware, (req, res) => {
   res.json({
-    message: 'This endpoint is rate limited to 1 request per second',
+    message: 'This endpoint is rate limited to 2 RPS',
     timestamp: new Date().toISOString(),
     data: {
       id: Math.floor(Math.random() * 1000),
