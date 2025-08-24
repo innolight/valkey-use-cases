@@ -1,6 +1,7 @@
 import express from 'express';
 import { ValkeyClient } from '@valkey-use-cases/shared';
-import { RateLimiter } from './rate-limiter';
+import { createRateLimitMiddleware, IpAddressKeyGenerator } from './middleware';
+import { SlidingWindowRateLimiter } from './valkey/sliding-window-rate-limiter';
 
 const app = express();
 const PORT = process.env.PORT || 3003;
@@ -9,16 +10,18 @@ app.use(express.json());
 
 const valkeyClient = ValkeyClient.getInstance();
 
-const rateLimiter = new RateLimiter(valkeyClient, {
+const rateLimiter = new SlidingWindowRateLimiter({
+  redis: valkeyClient,
   windowMs: 1000,
-  maxRequests: 1,
+  maxRequests: 1
 });
+const rateLimitMiddleware = createRateLimitMiddleware(rateLimiter, IpAddressKeyGenerator);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'rate-limiter' });
 });
 
-app.get('/api/data', rateLimiter.middleware(), (req, res) => {
+app.get('/api/data', rateLimitMiddleware, (req, res) => {
   res.json({
     message: 'Data retrieved successfully',
     timestamp: new Date().toISOString(),
@@ -26,7 +29,7 @@ app.get('/api/data', rateLimiter.middleware(), (req, res) => {
   });
 });
 
-app.get('/api/protected', rateLimiter.middleware(), (req, res) => {
+app.get('/api/protected', rateLimitMiddleware, (req, res) => {
   res.json({
     message: 'This endpoint is rate limited to 1 request per second',
     timestamp: new Date().toISOString(),

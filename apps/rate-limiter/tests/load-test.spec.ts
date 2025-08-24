@@ -1,7 +1,8 @@
 import request from 'supertest';
 import express from 'express';
 import { ValkeyClient } from '@valkey-use-cases/shared';
-import { RateLimiter } from '../src/rate-limiter';
+import { SlidingWindowRateLimiter } from '../src/valkey/sliding-window-rate-limiter';
+import { createRateLimitMiddleware, IpAddressKeyGenerator } from '../src/middleware';
 
 describe('Rate Limiter Load Test Verification', () => {
   let app: express.Application;
@@ -11,12 +12,14 @@ describe('Rate Limiter Load Test Verification', () => {
     app.use(express.json());
 
     const valkeyClient = ValkeyClient.getInstance();
-    const rateLimiter = new RateLimiter(valkeyClient, {
+    const rateLimiter = new SlidingWindowRateLimiter({
+      redis: valkeyClient,
       windowMs: 1000,
-      maxRequests: 1,
+      maxRequests: 2
     });
+    const rateLimitMiddleware = createRateLimitMiddleware(rateLimiter, IpAddressKeyGenerator);
 
-    app.get('/api/test', rateLimiter.middleware(), (req, res) => {
+    app.get('/api/test', rateLimitMiddleware, (req, res) => {
       res.json({ success: true, timestamp: Date.now() });
     });
   });
@@ -34,7 +37,7 @@ describe('Rate Limiter Load Test Verification', () => {
     await ValkeyClient.disconnect();
   });
 
-  test('simulates 3 RPS load with 1 RPS limit - sequential requests', async () => {
+  test('simulates 3 RPS load with 2 RPS limit - sequential requests', async () => {
     const results: Array<{status: number, success: boolean, time: number}> = [];
     const startTime = Date.now();
     
@@ -75,11 +78,11 @@ describe('Rate Limiter Load Test Verification', () => {
 
     console.log(`Results: ${successful} success, ${rateLimited} rate limited, ${successRate.toFixed(1)}% success rate`);
 
-    // Should have ~3 successful requests (1 per second) out of 9 total
-    expect(successful).toBeGreaterThanOrEqual(2);
-    expect(successful).toBeLessThanOrEqual(4);
-    expect(rateLimited).toBeGreaterThan(4);
-    expect(successRate).toBeGreaterThan(20);
-    expect(successRate).toBeLessThan(50);
+    // Should have ~6 successful requests (2 per second) out of 9 total
+    expect(successful).toBeGreaterThanOrEqual(5);
+    expect(successful).toBeLessThanOrEqual(7);
+    expect(rateLimited).toBeGreaterThan(2);
+    expect(successRate).toBeGreaterThan(50);
+    expect(successRate).toBeLessThan(80);
   }, 10000);
 });

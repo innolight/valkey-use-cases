@@ -74,3 +74,7 @@ valkey-use-cases/
 - **Efficient dependency management**: pnpm's content-addressable storage reduces disk usage
 
 Each use case is implemented as a separate Node.js/Express application that can be developed, tested, and deployed independently while sharing common utilities.
+
+## Design Guide
+
+1. When designing class constructors with multiple parameters, prefer using an options object instead of individual parameters for improved readability and maintainability.
