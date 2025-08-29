@@ -23,25 +23,14 @@ This implementation uses the **Sliding Window Log** approach, which provides pre
 
 ---
 
-#### Fixed Window Counter
-
-The fixed window counter divides time into fixed intervals and counts requests within each window. When a window expires, the counter resets to zero.
-
-**Key Advantages:**
-
-- **Minimal Memory**: Only stores a counter and timestamp per client
-- **Simple Implementation**: Easy to implement and understand
-- **High Performance**: Very fast operations with minimal overhead
-- **Scalable**: Excellent performance under high load
-
-**Trade-offs:**
-
-- **Boundary Issues**: Allows up to 2x the rate limit at window boundaries
-- **Uneven Distribution**: Requests can be concentrated at specific times
-- **Less Precise**: Cannot provide accurate "requests remaining" information
+| Algorithms         | Fixed Window Counter                                                                                                                                                                                                                                 | Token Bucket                                                                                                                                                                                                                                 | Sliding Window Log ✅                                                                                                                                                                                                                                                                           |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Description**    | Divides time into fixed intervals and counts requests within each window. When a window expires, the counter resets to zero.                                                                                                                         | Maintains a bucket of tokens that are consumed by requests. Tokens are added to the bucket at a fixed rate, allowing controlled bursts while maintaining average rate limits.                                                                | Tracks individual request timestamps within a rolling time window, providing the most accurate rate limiting behavior among all approaches.                                                                                                                                                     |
+| **Key Advantages** | • Minimal Memory: Only stores a counter and timestamp per client<br>• Simple Implementation: Easy to implement and understand<br>• High Performance: Very fast operations with minimal overhead<br>• Scalable: Excellent performance under high load | • Burst Handling: Allows traffic bursts up to bucket capacity<br>• Smooth Rate Control: Tokens refill at consistent rate<br>• Flexible: Can be tuned for different burst patterns<br>• Intuitive: Easy to understand token consumption model | • Precise Limiting: No burst allowance - exactly N requests per window<br>• Fair Distribution: Requests are spread evenly across the time window<br>• Memory Efficient: Automatic cleanup of expired entries<br>• Atomic Operations: ValKey pipelines ensure consistency under high concurrency |
+| **Trade-offs**     | • Boundary Issues: Allows up to 2x the rate limit at window boundaries<br>• Uneven Distribution: Requests can be concentrated at specific times<br>• Less Precise: Cannot provide accurate "requests remaining" information                          | • Complex State: Must track both token count and last refill time<br>• Burst Allowance: May allow temporary rate limit violations<br>• Configuration Complexity: Requires tuning of bucket size and refill rate                              | • Memory usage bounded by (request_limit × window_duration) per client<br>• More complex implementation requiring sorted data structures and Lua scripting<br>• Slight performance overhead from timestamp management<br>• Requires careful cleanup of expired entries                          |
 
 <details>
-<summary><strong>📋 Technical Implementation Details</strong></summary>
+<summary><strong>📋 Fixed Window Counter Implementation Details</strong></summary>
 
 ### Algorithm Flow
 
@@ -101,25 +90,8 @@ end
 
 </details>
 
-#### Token Bucket
-
-The token bucket algorithm maintains a bucket of tokens that are consumed by requests. Tokens are added to the bucket at a fixed rate, allowing controlled bursts while maintaining average rate limits.
-
-**Key Advantages:**
-
-- **Burst Handling**: Allows traffic bursts up to bucket capacity
-- **Smooth Rate Control**: Tokens refill at consistent rate
-- **Flexible**: Can be tuned for different burst patterns
-- **Intuitive**: Easy to understand token consumption model
-
-**Trade-offs:**
-
-- **Complex State**: Must track both token count and last refill time
-- **Burst Allowance**: May allow temporary rate limit violations
-- **Configuration Complexity**: Requires tuning of bucket size and refill rate
-
 <details>
-<summary><strong>📋 Technical Implementation Details</strong></summary>
+<summary><strong>📋 Token Bucket Implementation Details</strong></summary>
 
 ### Algorithm Flow
 
@@ -196,26 +168,8 @@ end
 
 </details>
 
-#### Sliding Window Log ✅ _Currently Implemented_
-
-The sliding window log algorithm tracks individual request timestamps within a rolling time window, providing the most accurate rate limiting behavior among all approaches.
-
-**Key Advantages:**
-
-- **Precise Limiting**: No burst allowance - exactly N requests per window
-- **Fair Distribution**: Requests are spread evenly across the time window
-- **Memory Efficient**: Automatic cleanup of expired entries
-- **Atomic Operations**: ValKey pipelines ensure consistency under high concurrency
-
-**Trade-offs:**
-
-- Memory usage bounded by (request_limit × window_duration) per client
-- More complex implementation requiring sorted data structures and Lua scripting
-- Slight performance overhead from timestamp management
-- Requires careful cleanup of expired entries
-
 <details>
-<summary><strong>📋 Technical Implementation Details</strong></summary>
+<summary><strong>📋 Sliding Window Log Implementation Details</strong></summary>
 
 ### Algorithm Flow
 
