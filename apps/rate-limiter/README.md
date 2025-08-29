@@ -254,75 +254,6 @@ end
   - **Retry-After Header Approach**: header indicating how long the client ought to wait before making a follow-up request. The Retry-After header can contain a HTTP date value to retry after or the number of seconds to delay. Either is acceptable but APIs should prefer to use a delay in seconds.
   - `X-RateLimit-*` headers are generally returned on every request and not just on a 429, unlike `Retry-After` header. Thus `X-RateLimit-*` enables client a more proactive approach in avoiding Rate Limit. Both approaches can be combined.
 
-### Implementation Considerations
-
-#### Error Handling & Resilience
-
-**ValKey Connection Failures**
-
-- **Fail Open Strategy**: When ValKey is unavailable, allow requests through rather than blocking all traffic
-- **Circuit Breaker Pattern**: Temporarily bypass rate limiting after consecutive ValKey failures
-- **Graceful Degradation**: Log errors but maintain service availability
-
-**Script Execution Errors**
-
-```lua
--- Add error handling to Lua scripts
-local success, result = pcall(function()
-    -- Main rate limiting logic here
-    return {1, remaining, limit}
-end)
-
-if not success then
-    -- Log error and fail open
-    return {1, -1, -1}  -- Allow request, unknown remaining
-end
-
-return result
-```
-
-**Concurrent Request Handling**
-
-- All algorithms use Lua scripts for atomic operations
-- Race conditions eliminated through single-threaded script execution
-- Pipeline operations ensure consistency under high load
-
-#### Performance Optimization
-
-**Memory Management**
-
-- **Automatic Cleanup**: TTL-based expiration prevents memory leaks
-- **Bounded Growth**: Sliding window memory = `requests × window_duration` per client
-- **Key Expiration**: Set appropriate TTL values (recommended: 2× window duration)
-
-**Network Optimization**
-
-```lua
--- Minimize round trips with combined operations
--- Single script call instead of multiple commands
-local result = redis.call('EVAL', script, 1, key, arg1, arg2, arg3)
-```
-
-**Monitoring & Observability**
-
-- Track rate limiter performance metrics
-- Monitor ValKey memory usage and key counts
-- Alert on high rejection rates or connection failures
-- Log rate limit violations for security analysis
-
-**Scaling Considerations**
-
-- **Horizontal Scaling**: Use consistent hashing for client-to-shard mapping
-- **Redis Clustering**: Ensure keys are properly distributed across cluster nodes
-- **Memory Limits**: Set appropriate `maxmemory` policies in ValKey configuration
-
-#### Production Deployment Tips
-
-1. **Test Under Load**: Validate behavior under concurrent request patterns
-2. **Monitor Key Expiration**: Ensure TTL settings prevent memory bloat
-3. **Backup Strategy**: Rate limit data is ephemeral but configuration should be backed up
-4. **Security**: Rate limiting helps prevent abuse but isn't a complete DDoS solution
-
 ## 📋 Prerequisites
 
 - Node.js 18+
@@ -393,28 +324,6 @@ cd apps/rate-limiter && \
 # Stop ValKey container
 pnpm docker:down
 ```
-
-## 🔧 How It Works
-
-The rate limiter implements a **sliding window log algorithm** using ValKey sorted sets for precise request throttling. For detailed technical information about the algorithm, data structures, and pipeline operations, see the [Rate Limit Algorithms](#rate-limit-algorithms) section above.
-
-### Request Processing Flow
-
-When a request hits the rate-limited endpoint, the application:
-
-1. **Identifies the client** using IP address extraction
-2. **Checks rate limit status** by querying the ValKey sorted set
-3. **Updates request log** by adding the current timestamp (if allowed)
-4. **Returns appropriate response**:
-   - HTTP 200 with rate limit headers if request is allowed
-   - HTTP 429 with retry information if rate limit exceeded
-
-### Key Features
-
-- **Atomic Operations**: All ValKey commands are executed in a pipeline for consistency
-- **Automatic Cleanup**: TTL ensures old keys are automatically removed
-- **Precise Timing**: Uses millisecond timestamps for accurate window calculations
-- **Client Identification**: Rate limits are applied per client IP address
 
 ## ⚙️ Configuration
 
