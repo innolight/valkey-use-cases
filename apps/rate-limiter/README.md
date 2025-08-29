@@ -17,6 +17,7 @@ Express.js application demonstrating **sliding window rate limiting** using ValK
     - `X-RateLimit-Remaining`: The number of requests allowed in the current window.
     - `X-RateLimit-Reset`: The relative time in seconds when the rate limit window will be reset. Beware that this is different to Github and Twitter’s usage of a header with the same name which is using UTC epoch seconds instead.
   - **Retry-After Header Approach**: header indicating how long the client ought to wait before making a follow-up request. The Retry-After header can contain a HTTP date value to retry after or the number of seconds to delay. Either is acceptable but APIs should prefer to use a delay in seconds.
+  - `X-RateLimit-*` headers are generally returned on every request and not just on a 429, like `Retry-After` header. Thus `X-RateLimit-*` enables client a more proactive approach in avoiding Rate Limit.
 
 ## 📋 Prerequisites
 
