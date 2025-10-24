@@ -1,5 +1,6 @@
 import express from 'express';
 import { ValkeyClient } from '@valkey-use-cases/shared';
+import readPatternsRouter from './routes/read-patterns';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -11,6 +12,9 @@ const valkeyClient = ValkeyClient.getInstance();
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'caching' });
 });
+
+// Mount route handlers
+app.use('/api/read-patterns', readPatternsRouter);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found' });
@@ -24,7 +28,9 @@ async function startServer() {
     app.listen(PORT, () => {
       console.log(`Caching API server running on port ${PORT}`);
       console.log(`Health check: http://localhost:${PORT}/health`);
-      console.log(`Cache operations: http://localhost:${PORT}/api/cache/{key}`);
+      console.log(`\nCache-Aside Pattern:`);
+      console.log(`  GET    http://localhost:${PORT}/api/read-patterns/cache-aside/:key?delay=1000`);
+      console.log(`  DELETE http://localhost:${PORT}/api/read-patterns/cache-aside/:key`);
     });
   } catch (error) {
     console.error('Failed to connect to Valkey:', error);
