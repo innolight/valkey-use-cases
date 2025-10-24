@@ -26,3 +26,35 @@ export interface IReadPatternService {
    */
   invalidate(key: string): Promise<boolean>;
 }
+
+export interface WriteMetadata {
+  key: string;
+  timeTaken: number; // milliseconds
+  writtenToCache: boolean;
+  writtenToSource: boolean;
+}
+
+export interface WriteResponse {
+  success: boolean;
+  metadata: WriteMetadata;
+}
+
+export interface IWritePatternService {
+  /**
+   * Write data to both cache and source
+   *
+   * @param key - The cache key to write
+   * @param value - The value to write
+   * @param delayMs - Optional simulated delay for expensive write operations (for demo purposes)
+   * @returns Promise resolving to WriteResponse with metadata
+   */
+  write(key: string, value: any, delayMs?: number): Promise<WriteResponse>;
+
+  /**
+   * Read data from cache (writes populate cache, so reads should always hit cache)
+   *
+   * @param key - The cache key to read
+   * @returns Promise resolving to CacheResponse with data and metadata
+   */
+  read(key: string): Promise<CacheResponse<any>>;
+}

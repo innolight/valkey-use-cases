@@ -127,8 +127,8 @@ How do you keep them synchronized?
 
 ```
 1. Application writes data
-2. Write to cache (SET key value)
-3. Write to source (database UPDATE) - synchronous
+2. Write to source (database UPDATE) - synchronous, ensures durability
+3. Write to cache (SET key value) - for fast subsequent reads
 4. Both writes must succeed
 5. Return success to application
 ```
@@ -319,7 +319,7 @@ Cache key expires → 100 concurrent requests arrive
 ### Complete Pattern Analysis
 
 | Pattern                 | Pros                                                                                                                                                     | Cons                                                                                                                                                             | When to Use                                                                                                                                            | When NOT to Use                                                                                                             | Real-World Use Cases                                                                                         | Key Considerations                                                                                           |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
 | **Cache-Aside**         | • Simple to implement<br>• Only requested data cached<br>• Full application control<br>• Works with any data source<br>• Cache failure doesn't break app | • Cache miss penalty (first request slow)<br>• Potential stale data<br>• Tight coupling to cache<br>• Each miss hits source<br>• Three round trips on miss       | • Read-heavy workloads<br>• Acceptable cache misses<br>• Need full control<br>• Different data requirements<br>• Default choice                        | • Need guaranteed consistency<br>• Cache misses unacceptable<br>• App should be cache-agnostic                              | • Product catalogs<br>• User profiles<br>• CMS articles<br>• API responses<br>• DNS lookups                  | • Invalidation strategy<br>• Cache key design<br>• Serialization format<br>• Error handling                  |
 | **Read-Through**        | • Cleaner app code<br>• Consistent interface<br>• Easier testing<br>• Centralized logic<br>• Easy to add features                                        | • Cache must know data loading<br>• Less flexible than cache-aside<br>• Complex cache implementation<br>• Cache coupled to source<br>• Overkill for simple cases | • Simplify app code<br>• Consistent loading logic<br>• Reusable caching layer<br>• Swap implementations easily                                         | • Different loading strategies<br>• Cache can't access source<br>• Need fine-grained control                                | • Caching frameworks<br>• ORM caching<br>• GraphQL DataLoaders<br>• Hibernate cache                          | • Data loader config<br>• Error handling<br>• Monitoring hit ratio                                           |
 | **Write-Through**       | • Cache & source always consistent<br>• No misses on recent writes<br>• Simple consistency model<br>• Immediate durability<br>• Easier to reason about   | • Slower writes (both systems)<br>• Write penalty if never read<br>• Increased write latency<br>• Source is bottleneck<br>• Both systems must be available       | • Consistency critical<br>• Reads >> writes<br>• Read-after-write pattern<br>• Can tolerate slow writes<br>• Compliance needs                          | • Write performance critical<br>• High write volume<br>• Rarely read back<br>• Expensive writes                             | • Account settings<br>• Shopping carts<br>• Configuration<br>• Transactions<br>• User preferences            | • Transaction management<br>• Rollback strategy<br>• Write amplification<br>• Network failures               |
@@ -618,28 +618,35 @@ GET /api/write-patterns/write-through/:key
 POST /api/write-patterns/write-behind/:key
 # Body: { "value": any }
 GET /api/write-patterns/write-behind/:key
-GET /api/write-patterns/write-behind/queue  # View pending writes
+GET /api/write-patterns/write-behind-queue/stats  # View queue statistics
 
 # Write-Around
 POST /api/write-patterns/write-around/:key
 # Body: { "value": any, "delay"?: number }
 ```
 
-**Example:**
+**Examples:**
 
 ```bash
-# Write-Through
+# Write-Through (slow but consistent)
 curl -X POST http://localhost:3002/api/write-patterns/write-through/config \
   -H "Content-Type: application/json" \
   -d '{"value": {"theme": "dark"}}'
+# Returns: {"success":true,"metadata":{"key":"config","timeTaken":1002,"writtenToCache":true,"writtenToSource":true}}
 
-# Write-Behind (fast response)
+# Write-Behind (fast, queued for persistence)
 curl -X POST http://localhost:3002/api/write-patterns/write-behind/event \
   -H "Content-Type: application/json" \
   -d '{"value": {"action": "click", "count": 1}}'
+# Returns: {"success":true,"metadata":{"key":"event","timeTaken":2,"writtenToCache":true,"writtenToSource":false}}
 
-# Check queue
-curl http://localhost:3002/api/write-patterns/write-behind/queue
+# Read from cache (write-behind)
+curl http://localhost:3002/api/write-patterns/write-behind/event
+# Returns: {"data":{"action":"click","count":1},"metadata":{"key":"event","source":"cache","timeTaken":1}}
+
+# Check queue statistics
+curl http://localhost:3002/api/write-patterns/write-behind-queue/stats
+# Returns: {"queue":"write-behind","stats":{"totalPendingMessages":0,"totalStreamLength":5,"activeConsumers":1},"description":{...}}
 ```
 
 #### Eviction & Expiration
@@ -710,26 +717,57 @@ time curl http://localhost:3002/api/read-patterns/cache-aside/test1
 # ~5ms (400x faster!)
 ```
 
-#### 2. Write-Behind Queue
+#### 2. Write-Behind Performance
 
 ```bash
-# Generate 5 writes
-for i in {1..5}; do
-  curl -X POST http://localhost:3002/api/write-patterns/write-behind/event$i \
-    -H "Content-Type: application/json" \
-    -d "{\"value\": {\"count\": $i}}"
-done
+# Test fast write performance
+time curl -X POST http://localhost:3002/api/write-patterns/write-behind/event1 \
+  -H "Content-Type: application/json" \
+  -d '{"value": {"action": "click", "count": 1}}'
+# Response: ~1-5ms (fast! write is queued)
+# Returns: {"success":true,"metadata":{"key":"event1","timeTaken":2,"writtenToCache":true,"writtenToSource":false}}
 
-# Check queue
-curl http://localhost:3002/api/write-patterns/write-behind/queue
-# Returns: 5 pending writes
+# Read back from cache
+curl http://localhost:3002/api/write-patterns/write-behind/event1
+# Response: immediate cache hit
+# Returns: {"data":{"action":"click","count":1},"metadata":{"key":"event1","source":"cache","timeTaken":1}}
+```
 
-# Wait for worker (5 seconds)
+#### 3. Write-Behind Queue Monitoring
+
+```bash
+# Generate 5 writes to queue
+curl -s -X POST http://localhost:3002/api/write-patterns/write-behind/event1 -H "Content-Type: application/json" -d '{"value": {"count": 1}}'
+curl -s -X POST http://localhost:3002/api/write-patterns/write-behind/event2 -H "Content-Type: application/json" -d '{"value": {"count": 2}}'
+curl -s -X POST http://localhost:3002/api/write-patterns/write-behind/event3 -H "Content-Type: application/json" -d '{"value": {"count": 3}}'
+curl -s -X POST http://localhost:3002/api/write-patterns/write-behind/event4 -H "Content-Type: application/json" -d '{"value": {"count": 4}}'
+curl -s -X POST http://localhost:3002/api/write-patterns/write-behind/event5 -H "Content-Type: application/json" -d '{"value": {"count": 5}}'
+
+# Check queue statistics immediately
+curl http://localhost:3002/api/write-patterns/write-behind-queue/stats
+# Returns queue statistics:
+# {
+#   "queue": "write-behind",
+#   "stats": {
+#     "totalPendingMessages": 0-5,        // Messages delivered but not yet acked
+#     "totalStreamLength": 5+,            // All messages in stream (includes processed)
+#     "activeConsumers": 1,               // Number of active workers
+#     "oldestPendingMs": 100              // Age of oldest pending message (if any)
+#   },
+#   "description": { ... }
+# }
+
+# Wait for worker to process (5 seconds)
 sleep 6
 
-# Queue empty
-curl http://localhost:3002/api/write-patterns/write-behind/queue
-# Returns: 0 pending writes
+# Check queue again (should be processed)
+curl http://localhost:3002/api/write-patterns/write-behind-queue/stats
+# Returns: totalPendingMessages should be 0 (all processed and acknowledged)
+
+# Check server logs to see:
+# [Write-Behind] Processing write for key: event1
+# [Write-Behind] Successfully wrote to database: event1
+# ... (for each event)
 ```
 
 #### 3. Stampede Prevention
@@ -753,14 +791,15 @@ done
 
 Expected timings from the demo API:
 
-| Operation              | Cache Hit   | Cache Miss  | Speedup   |
-| ---------------------- | ----------- | ----------- | --------- |
-| Cache-Aside            | 1-5ms       | 1000-3000ms | 200-3000x |
-| Write-Through (read)   | 1-5ms       | N/A         | N/A       |
-| Write-Through (write)  | 1000-2000ms | N/A         | N/A       |
-| Write-Behind (write)   | 1-5ms       | N/A         | 200-2000x |
-| Stampede (1st request) | N/A         | 2000-5000ms | N/A       |
-| Stampede (2nd-Nth)     | 100-500ms   | N/A         | 5-50x     |
+| Operation              | Cache Hit | Cache Miss  | Speedup   | Notes                                    |
+| ---------------------- | --------- | ----------- | --------- | ---------------------------------------- |
+| Cache-Aside            | 1-5ms     | 1000-3000ms | 200-3000x | First read slow, subsequent reads fast   |
+| Write-Through (read)   | 1-5ms     | N/A         | N/A       | Always fast reads after write            |
+| Write-Through (write)  | N/A       | 1000-2000ms | N/A       | Slow writes (source + cache)             |
+| Write-Behind (read)    | 1-5ms     | N/A         | N/A       | Always fast reads after write            |
+| Write-Behind (write)   | 1-5ms     | N/A         | 200-2000x | Fast writes (queued), eventual consistency |
+| Stampede (1st request) | N/A       | 2000-5000ms | N/A       | Only first request computes              |
+| Stampede (2nd-Nth)     | 100-500ms | N/A         | 5-50x     | Other requests wait for cache            |
 
 ### Redis Commands Reference
 
