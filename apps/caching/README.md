@@ -53,23 +53,10 @@ Before diving into patterns, consider these foundational best practices:
 
 This guide covers 10 caching patterns organized into four categories:
 
-1. **Read Patterns** (2) - How to retrieve and populate cache
-   - Cache-Aside (Lazy Loading)
-   - Read-Through
-
-2. **Write Patterns** (3) - How to handle data modifications
-   - Write-Through
-   - Write-Behind (Write-Back)
-   - Write-Around
-
-3. **Eviction & Expiration** (2) - How to manage cache lifetime
-   - TTL (Time-To-Live)
-   - LRU/LFU Eviction
-
-4. **Advanced Patterns** (3) - Specialized optimization techniques
-   - Cache Warming (Pre-loading)
-   - Refresh-Ahead
-   - Cache Stampede Prevention
+1. **Read Patterns**: Cache-Aside (Lazy Loading), Read-Through
+2. **Write Patterns**: Write-Through, Write-Behind (Write-Back), Write-Around
+3. **Eviction & Expiration Strategies**: TTL (Time-To-Live), LRU/LFU Eviction
+4. **Advanced Patterns**: Cache Warming (Pre-loading), Refresh-Ahead, Cache Stampede Prevention
 
 ---
 
@@ -79,9 +66,7 @@ Read patterns define how your application retrieves data and populates the cache
 
 ### 1. Cache-Aside (Lazy Loading)
 
-**The Pattern:**
-
-The most common caching pattern where the application code explicitly manages the cache:
+**The Pattern:** The most common caching pattern where the application code explicitly manages the cache:
 
 ```
 1. Application requests data by key
@@ -98,9 +83,7 @@ The most common caching pattern where the application code explicitly manages th
 
 ### 2. Read-Through
 
-**The Pattern:**
-
-A cache abstraction where the cache itself is responsible for loading data from the source. The application always interacts with the cache, which transparently handles cache misses.
+**The Pattern:** A cache abstraction where the cache itself is responsible for loading data from the source. The application always interacts with the cache, which transparently handles cache misses.
 
 ```
 1. Application requests data from cache
@@ -140,9 +123,7 @@ How do you keep them synchronized?
 
 ### 3. Write-Through
 
-**The Pattern:**
-
-Every write goes through the cache to the source. Both cache and source are updated synchronously before the write is considered complete.
+**The Pattern:** Every write goes through the cache to the source. Both cache and source are updated synchronously before the write is considered complete.
 
 ```
 1. Application writes data
@@ -158,9 +139,7 @@ Every write goes through the cache to the source. Both cache and source are upda
 
 ### 4. Write-Behind (Write-Back)
 
-**The Pattern:**
-
-Writes go to cache immediately and return. The write to the source happens asynchronously in the background. This provides fast write performance at the cost of eventual consistency.
+**The Pattern:** Writes go to cache immediately and return. The write to the source happens asynchronously in the background. This provides fast write performance at the cost of eventual consistency.
 
 ```
 1. Application writes data
@@ -178,9 +157,7 @@ Writes go to cache immediately and return. The write to the source happens async
 
 ### 5. Write-Around
 
-**The Pattern:**
-
-Writes bypass the cache entirely and go directly to the source. To prevent serving stale data, the corresponding cache key is invalidated. Data is only cached on the next read.
+**The Pattern:** Writes bypass the cache entirely and go directly to the source. To prevent serving stale data, the corresponding cache key is invalidated. Data is only cached on the next read.
 
 ```
 1. Application writes data
@@ -201,9 +178,7 @@ How do you remove data from cache? Two approaches: time-based (TTL) and space-ba
 
 ### 6. TTL (Time-To-Live)
 
-**The Pattern:**
-
-Cache entries automatically expire after a specified duration. Redis handles deletion automatically.
+**The Pattern:** Cache entries automatically expire after a specified duration. Redis handles deletion automatically.
 
 ```
 1. Store data with TTL (SET key value EX seconds)
@@ -227,9 +202,7 @@ Cache entries automatically expire after a specified duration. Redis handles del
 
 ### 7. LRU/LFU Eviction
 
-**The Pattern:**
-
-When cache memory is full, Redis automatically evicts entries based on access patterns. This is configured at the Redis server level, not in application code.
+**The Pattern:** When cache memory is full, Redis automatically evicts entries based on access patterns. This is configured at the Redis server level, not in application code.
 
 ```
 1. Redis hits configured memory limit (maxmemory)
@@ -274,9 +247,7 @@ Advanced patterns combine multiple caching techniques to solve specific performa
 
 ### 8. Cache Warming (Pre-loading)
 
-**The Pattern:**
-
-Proactively load data into cache before it's requested, typically during application startup or off-peak hours.
+**The Pattern:** Proactively load data into cache before it's requested, typically during application startup or off-peak hours.
 
 ```
 1. Application starts or scheduled job runs
@@ -293,9 +264,7 @@ Proactively load data into cache before it's requested, typically during applica
 
 ### 9. Refresh-Ahead
 
-**The Pattern:**
-
-Proactively refresh cached data before it expires. When a cache hit occurs and TTL is low, trigger a background refresh while returning the current cached value.
+**The Pattern:** Proactively refresh cached data before it expires. When a cache hit occurs and TTL is low, trigger a background refresh while returning the current cached value.
 
 ```
 1. Request arrives for key
@@ -323,9 +292,7 @@ Proactively refresh cached data before it expires. When a cache hit occurs and T
 
 ### 10. Cache Stampede Prevention
 
-**The Pattern:**
-
-When a popular cache entry expires, multiple concurrent requests may try to recompute it simultaneously (thundering herd). Use distributed locking to ensure only one request recomputes while others wait.
+**The Pattern:** When a popular cache entry expires, multiple concurrent requests may try to recompute it simultaneously (thundering herd). Use distributed locking to ensure only one request recomputes while others wait.
 
 **The Problem:**
 
