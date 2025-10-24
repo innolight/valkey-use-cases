@@ -147,7 +147,7 @@ router.get('/write-behind-queue/stats', async (req: Request, res: Response) => {
           'Total messages in the Redis Stream (includes processed messages)',
         activeConsumers: 'Number of active consumer workers',
         oldestPendingMs:
-          'Age of the oldest pending message in milliseconds (undefined if no pending messages)',
+          'Age of the oldest pending message in milliseconds (0 if no pending messages)',
       },
     });
   } catch (error) {
@@ -160,3 +160,4 @@ router.get('/write-behind-queue/stats', async (req: Request, res: Response) => {
 });
 
 export default router;
+export { writeBehindService };

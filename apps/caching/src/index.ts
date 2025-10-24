@@ -1,7 +1,7 @@
 import express from 'express';
 import { ValkeyClient } from '@valkey-use-cases/shared';
 import readPatternsRouter from './routes/read-patterns';
-import writePatternsRouter from './routes/write-patterns';
+import writePatternsRouter, { writeBehindService } from './routes/write-patterns';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -54,12 +54,14 @@ async function startServer() {
 
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully');
+  await writeBehindService.destroy();
   await ValkeyClient.disconnect();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   console.log('SIGINT received, shutting down gracefully');
+  await writeBehindService.destroy();
   await ValkeyClient.disconnect();
   process.exit(0);
 });
