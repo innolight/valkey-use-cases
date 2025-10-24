@@ -1,8 +1,19 @@
 # Rate Limiter Use Case
 
-Express.js application demonstrating **sliding window rate limiting** using ValKey (Redis-compatible) for precise request throttling.
+An application demonstrating **sliding window rate limiting** using ValKey (Redis-compatible) for precise request throttling.
 
-## Design Considerations 🚀
+## Design Considerations
+
+### HTTP API Design
+
+- **HTTP 429 Status Code**: Response with "Too Many Requests" when rate limit applies.
+- **Provide Further Rate Limit Details**: two approaches (not mutually exclusive) a service can take
+  - **Rate Limit Headers Approach**: use `X-RateLimit-*` headers for client visibility
+    - `X-RateLimit-Limit`: The maximum number of requests that the client is allowed to make in this window.
+    - `X-RateLimit-Remaining`: The number of requests allowed in the current window.
+    - `X-RateLimit-Reset`: The relative time in seconds when the rate limit window will be reset. Note: This differs from other implementations (like GitHub's) that use a UTC epoch timestamp.
+  - **Retry-After Header Approach**: header indicating how long the client ought to wait before making a follow-up request. The Retry-After header can contain a HTTP date value to retry after or the number of seconds to delay. Either is acceptable but APIs should prefer to use a delay in seconds.
+  - `X-RateLimit-*` headers are generally returned on every request and not just on a 429, unlike `Retry-After` header. Thus `X-RateLimit-*` enables client a more proactive approach in avoiding Rate Limit. Both approaches can be combined.
 
 ### Rate Limit Algorithms
 
@@ -242,17 +253,6 @@ end
 ```
 
 </details>
-
-### HTTP API
-
-- **HTTP 429 Status Code**: Response with "Too Many Requests" when rate limit applies.
-- **Provide Further Rate Limit Details**: two approaches (not mutually exclusive) a service can take
-  - **Rate Limit Headers Approach**: use `X-RateLimit-*` headers for client visibility
-    - `X-RateLimit-Limit`: The maximum number of requests that the client is allowed to make in this window.
-    - `X-RateLimit-Remaining`: The number of requests allowed in the current window.
-    - `X-RateLimit-Reset`: The relative time in seconds when the rate limit window will be reset. Note: This differs from other implementations (like GitHub's) that use a UTC epoch timestamp.
-  - **Retry-After Header Approach**: header indicating how long the client ought to wait before making a follow-up request. The Retry-After header can contain a HTTP date value to retry after or the number of seconds to delay. Either is acceptable but APIs should prefer to use a delay in seconds.
-  - `X-RateLimit-*` headers are generally returned on every request and not just on a 429, unlike `Retry-After` header. Thus `X-RateLimit-*` enables client a more proactive approach in avoiding Rate Limit. Both approaches can be combined.
 
 ## 📋 Prerequisites
 
