@@ -37,11 +37,7 @@ export class WriteThroughService implements IWritePatternService {
 
   constructor(private readonly redis: Redis) {}
 
-  async write(
-    key: string,
-    value: any,
-    delayMs = 1000,
-  ): Promise<WriteResponse> {
+  async write(key: string, value: any, delayMs = 1000): Promise<WriteResponse> {
     const startTime = Date.now();
     const cacheKey = `write-through:${key}`;
 
@@ -56,7 +52,7 @@ export class WriteThroughService implements IWritePatternService {
         cacheKey,
         JSON.stringify(value),
         'EX',
-        this.DEFAULT_TTL,
+        this.DEFAULT_TTL
       );
 
       const timeTaken = Date.now() - startTime;

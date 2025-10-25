@@ -58,3 +58,30 @@ export interface IWritePatternService {
    */
   read(key: string): Promise<CacheResponse<any>>;
 }
+
+// Cache Warming Interfaces
+export interface WarmingOptions {
+  keys?: string[];
+  batchSize?: number;
+  ttl?: number;
+  delay?: number;
+}
+
+export interface BatchMetric {
+  batchNumber: number;
+  keysInBatch: number;
+  timeMs: number;
+}
+
+export interface WarmingMetadata {
+  totalKeys: number;
+  successCount: number;
+  failureCount: number;
+  totalTimeMs: number;
+  batchMetrics: BatchMetric[];
+}
+
+export interface WarmingResult {
+  success: boolean;
+  metadata: WarmingMetadata;
+}
