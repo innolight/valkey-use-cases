@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { CacheWarmingService } from '../services/advanced/cache-warming.service';
+import { RefreshAheadService } from '../services/advanced/refresh-ahead.service';
 import { ValkeyClient } from '@valkey-use-cases/shared';
 
 const router: Router = Router();
@@ -7,6 +8,9 @@ const redis = ValkeyClient.getInstance();
 
 // Initialize cache warming service
 export const cacheWarmingService = new CacheWarmingService(redis);
+
+// Initialize refresh-ahead service
+export const refreshAheadService = new RefreshAheadService(redis);
 
 /**
  * POST /api/advanced-patterns/cache-warming
@@ -78,6 +82,81 @@ router.get('/cache-warming/:key', async (req: Request, res: Response) => {
     res.json(result);
   } catch (error) {
     console.error('Cache warming GET error:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/advanced-patterns/refresh-ahead/:key
+ * Get data with refresh-ahead pattern
+ *
+ * Example: GET /api/advanced-patterns/refresh-ahead/cache-item-1
+ *
+ * The refresh-ahead pattern ensures:
+ * 1. Fast reads (always from cache if available)
+ * 2. Proactive refresh when TTL is low
+ * 3. No cache miss penalty for hot data
+ */
+router.get('/refresh-ahead/:key', async (req: Request, res: Response) => {
+  try {
+    const result = await refreshAheadService.get(req.params.key);
+    res.json(result);
+  } catch (error) {
+    console.error('Refresh-ahead GET error:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/advanced-patterns/refresh-ahead/:key/status
+ * Get refresh status for a key
+ *
+ * Returns information about:
+ * - Whether key is cached
+ * - Current TTL
+ * - Whether refresh is in progress (locked)
+ * - Whether refresh is needed
+ */
+router.get(
+  '/refresh-ahead/:key/status',
+  async (req: Request, res: Response) => {
+    try {
+      const { key } = req.params;
+      const status = await refreshAheadService.getRefreshStatus(key);
+
+      res.json({ key, status });
+    } catch (error) {
+      console.error('Refresh-ahead status error:', error);
+      res.status(500).json({
+        error: 'Internal server error',
+        message: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+);
+
+/**
+ * DELETE /api/advanced-patterns/refresh-ahead/:key
+ * Invalidate a refresh-ahead cache entry
+ */
+router.delete('/refresh-ahead/:key', async (req: Request, res: Response) => {
+  try {
+    const { key } = req.params;
+    const deleted = await refreshAheadService.invalidate(key);
+
+    res.json({
+      success: true,
+      deleted,
+      message: deleted ? 'Cache entry invalidated' : 'Cache entry not found',
+    });
+  } catch (error) {
+    console.error('Refresh-ahead DELETE error:', error);
     res.status(500).json({
       error: 'Internal server error',
       message: error instanceof Error ? error.message : 'Unknown error',
