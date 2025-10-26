@@ -679,7 +679,7 @@ POST /api/advanced-patterns/cache-warming
 GET /api/advanced-patterns/cache-warming/:key
 
 # Refresh-Ahead
-GET /api/advanced-patterns/refresh-ahead/:key?delay=1000&ttl=60&refreshThreshold=0.8
+GET /api/advanced-patterns/refresh-ahead/:key
 GET /api/advanced-patterns/refresh-ahead/:key/status
 
 # Stampede Prevention
@@ -791,15 +791,15 @@ done
 
 Expected timings from the demo API:
 
-| Operation              | Cache Hit | Cache Miss  | Speedup   | Notes                                    |
-| ---------------------- | --------- | ----------- | --------- | ---------------------------------------- |
-| Cache-Aside            | 1-5ms     | 1000-3000ms | 200-3000x | First read slow, subsequent reads fast   |
-| Write-Through (read)   | 1-5ms     | N/A         | N/A       | Always fast reads after write            |
-| Write-Through (write)  | N/A       | 1000-2000ms | N/A       | Slow writes (source + cache)             |
-| Write-Behind (read)    | 1-5ms     | N/A         | N/A       | Always fast reads after write            |
+| Operation              | Cache Hit | Cache Miss  | Speedup   | Notes                                      |
+| ---------------------- | --------- | ----------- | --------- | ------------------------------------------ |
+| Cache-Aside            | 1-5ms     | 1000-3000ms | 200-3000x | First read slow, subsequent reads fast     |
+| Write-Through (read)   | 1-5ms     | N/A         | N/A       | Always fast reads after write              |
+| Write-Through (write)  | N/A       | 1000-2000ms | N/A       | Slow writes (source + cache)               |
+| Write-Behind (read)    | 1-5ms     | N/A         | N/A       | Always fast reads after write              |
 | Write-Behind (write)   | 1-5ms     | N/A         | 200-2000x | Fast writes (queued), eventual consistency |
-| Stampede (1st request) | N/A       | 2000-5000ms | N/A       | Only first request computes              |
-| Stampede (2nd-Nth)     | 100-500ms | N/A         | 5-50x     | Other requests wait for cache            |
+| Stampede (1st request) | N/A       | 2000-5000ms | N/A       | Only first request computes                |
+| Stampede (2nd-Nth)     | 100-500ms | N/A         | 5-50x     | Other requests wait for cache              |
 
 ### Redis Commands Reference
 
