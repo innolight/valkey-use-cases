@@ -34,15 +34,14 @@ async function startServer() {
     console.log('Connected to Valkey');
 
     // Warm cache on startup
-    console.log('\nWarming cache...');
+    console.log('\n[Cache Warming] Warming cache on start-up...');
     const warmingResult = await cacheWarmingService.warmCache();
     console.log(
-      `Cache warmed: ${warmingResult.metadata.successCount}/${warmingResult.metadata.totalKeys} keys in ${warmingResult.metadata.totalTimeMs}ms`
+      `[Cache Warming] Cache warmed: ${warmingResult.metadata.successCount}/${warmingResult.metadata.totalKeys} keys in ${warmingResult.metadata.totalTimeMs}ms`
     );
 
     // Start scheduled warming (every 5 minutes)
     cacheWarmingService.startScheduledWarming(5 * 60 * 1000);
-    console.log('Scheduled cache warming enabled (interval: 5 minutes)');
 
     app.listen(PORT, () => {
       console.log(`\nCaching API server running on port ${PORT}`);

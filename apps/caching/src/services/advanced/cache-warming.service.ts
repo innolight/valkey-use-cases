@@ -73,8 +73,7 @@ export class CacheWarmingService {
     }
 
     const totalTimeMs = Date.now() - startTime;
-
-    return {
+    const result = {
       success: true,
       metadata: {
         totalKeys: keys.length,
@@ -84,6 +83,11 @@ export class CacheWarmingService {
         batchMetrics,
       },
     };
+    console.log(
+      `[Cache Warming] Completed: ${result.metadata.successCount}/${result.metadata.totalKeys} keys in ${result.metadata.totalTimeMs}ms`
+    );
+
+    return result;
   }
 
   /**
@@ -208,11 +212,8 @@ export class CacheWarmingService {
 
     this.scheduledInterval = setInterval(async () => {
       try {
-        console.log('[Cache Warming] Starting scheduled warming...');
-        const result = await this.warmCache();
-        console.log(
-          `[Cache Warming] Completed: ${result.metadata.successCount}/${result.metadata.totalKeys} keys in ${result.metadata.totalTimeMs}ms`
-        );
+        console.log('[Cache Warming] Starting scheduled Cache warming...');
+        await this.warmCache();
       } catch (error) {
         console.error('[Cache Warming] Scheduled warming failed:', error);
         // In production: emit metrics, send alerts, but don't crash
@@ -220,7 +221,7 @@ export class CacheWarmingService {
     }, intervalMs);
 
     console.log(
-      `[Cache Warming] Scheduled warming enabled (interval: ${intervalMs}ms)`
+      `[Cache Warming] Scheduled warming enabled (interval: ${intervalMs / 1000 / 60}minutes)`
     );
   }
 
