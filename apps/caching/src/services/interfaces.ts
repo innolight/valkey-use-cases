@@ -85,3 +85,20 @@ export interface WarmingResult {
   success: boolean;
   metadata: WarmingMetadata;
 }
+
+/**
+ * Extended metadata for stampede prevention pattern
+ */
+export interface StampedeMetadata extends CacheMetadata {
+  lockAcquired?: boolean; // True if this request acquired the lock
+  waitedForLock?: boolean; // True if this request waited for another
+  waitTimeMs?: number; // Time spent waiting for lock holder
+}
+
+/**
+ * Response type for stampede prevention service
+ */
+export interface StampedeResponse<T> {
+  data: T;
+  metadata: StampedeMetadata;
+}

@@ -297,20 +297,115 @@ Advanced patterns combine multiple caching techniques to solve specific performa
 **The Problem:**
 
 ```
-Cache key expires → 100 concurrent requests arrive → All 100 see cache miss
+Cache expires → 100 concurrent requests → All see cache miss
 → All 100 query database simultaneously → Database overload! 💥
 ```
 
-**The Solution:**
+**The Solution:** Combine three implementation aspects:
+
+#### **1. Lock Acquisition Strategy**
+
+Acquire an exclusive lock using `SET lock:key unique_token NX EX 10`:
+- `NX` ensures only one request gets the lock (atomic test-and-set)
+- `EX 10` auto-expires lock after 10s (prevents deadlock if holder crashes)
+- `unique_token` enables safe lock release (only lock owner can delete)
+
+#### **2. Lock Release Strategy**
+
+Release lock atomically using Lua script to verify ownership:
+
+```lua
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+  return redis.call("DEL", KEYS[1])
+else
+  return 0
+end
+```
+
+This prevents releasing another request's lock if the first request times out.
+
+#### **3. Waiting Strategy for Lock Holders**
+
+When lock acquisition fails, requests need to wait. Two approaches:
+
+---
+
+##### **Approach A: Polling Pattern**
+
+**Strategy:** Repeatedly check cache until data appears.
 
 ```
-Cache key expires → 100 concurrent requests arrive
-→ Request 1: Acquires lock with unique value (SET lock:key unique_val NX EX 10)
-→ Requests 2-100: See lock exists, wait and retry cache
-→ Request 1: Computes, stores result, releases lock (using Lua script to check unique_val before DEL) → Requests 2-100: Cache hit! ✅
+Request 1: Acquires lock → Computes (2000ms) → Writes cache → Releases lock
+Request 2-100: Poll cache every 50ms → Eventually see data
 ```
 
-**Redis Commands:** `SET lock:key value NX EX seconds`, `DEL lock:key` (often via Lua script for safety), `GET key`
+**Implementation:**
+```javascript
+while (!cacheData && attempts < maxAttempts) {
+  await sleep(50);
+  cacheData = await redis.get(key);
+  attempts++;
+}
+```
+
+**Trade-offs:**
+- ✅ Simple: No additional Redis features, predictable behavior
+- ✅ Safe: No message loss or timing edge cases
+- ❌ Network traffic: 100 requests × 40 polls = 4,000 operations
+- ❌ Latency variance: 0-50ms depending on poll timing
+- ❌ Resource waste: CPU cycles in busy-wait loops
+
+**Best for:** Moderate concurrency (<50 requests), short compute times (<1s), simplicity priority
+
+---
+
+##### **Approach B: Pub/Sub Pattern** ⭐ _Implemented_
+
+**Strategy:** Sleep until lock holder publishes "data ready" notification.
+
+```
+Request 1: Acquires lock → Computes (2000ms) → Writes cache → PUBLISH "ready:key"
+Request 2-100: SUBSCRIBE "ready:key" → Sleep → Wake instantly on publish
+```
+
+**Implementation:**
+```javascript
+await new Promise((resolve) => {
+  const subscriber = redis.duplicate();
+  subscriber.subscribe(`cache-ready:${key}`);
+  subscriber.on('message', () => {
+    subscriber.quit();
+    resolve();
+  });
+  setTimeout(resolve, timeout); // Fallback
+});
+```
+
+**Trade-offs:**
+- ✅ Efficient: ~201 operations (1 lock + 100 subscribe + 100 wake)
+- ✅ Instant wake-up: No latency variance (<5ms)
+- ✅ Scalable: Constant overhead regardless of concurrency
+- ❌ Complexity: Requires Pub/Sub, timing edge cases (subscribe before publish)
+- ❌ Debugging: Harder to trace message flow
+
+**Best for:** High concurrency (>100 requests), expensive operations (>2s), production systems
+
+---
+
+##### **Performance Comparison**
+
+| Metric                                    | Polling               | Pub/Sub               |
+| ----------------------------------------- | --------------------- | --------------------- |
+| **Total Redis ops** (100 req, 2s compute) | ~4,000                | ~201                  |
+| **Wake-up latency**                       | 0-50ms (variable)     | <5ms (instant)        |
+| **CPU usage**                             | High (busy-wait)      | Low (true sleep)      |
+| **Code complexity**                       | Simple (~50 LOC)      | Moderate (~100 LOC)   |
+| **Edge cases**                            | None                  | Subscription timing   |
+| **Scalability**                           | O(n) per request      | O(1) constant         |
+
+**Implementation Choice:** This project uses **Pub/Sub** because cache stampede prevention targets expensive operations where high concurrency is expected. For simpler scenarios (moderate load, short computes), polling may suffice.
+
+**Redis Commands:** `SET lock:key token NX EX`, `GET lock:key`, Lua script for `DEL`, `PUBLISH channel`, `SUBSCRIBE channel`
 
 ---
 
@@ -318,18 +413,18 @@ Cache key expires → 100 concurrent requests arrive
 
 ### Complete Pattern Analysis
 
-| Pattern                 | Pros                                                                                                                                                     | Cons                                                                                                                                                             | When to Use                                                                                                                                            | When NOT to Use                                                                                                             | Real-World Use Cases                                                                                         | Key Considerations                                                                                           |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| **Cache-Aside**         | • Simple to implement<br>• Only requested data cached<br>• Full application control<br>• Works with any data source<br>• Cache failure doesn't break app | • Cache miss penalty (first request slow)<br>• Potential stale data<br>• Tight coupling to cache<br>• Each miss hits source<br>• Three round trips on miss       | • Read-heavy workloads<br>• Acceptable cache misses<br>• Need full control<br>• Different data requirements<br>• Default choice                        | • Need guaranteed consistency<br>• Cache misses unacceptable<br>• App should be cache-agnostic                              | • Product catalogs<br>• User profiles<br>• CMS articles<br>• API responses<br>• DNS lookups                  | • Invalidation strategy<br>• Cache key design<br>• Serialization format<br>• Error handling                  |
-| **Read-Through**        | • Cleaner app code<br>• Consistent interface<br>• Easier testing<br>• Centralized logic<br>• Easy to add features                                        | • Cache must know data loading<br>• Less flexible than cache-aside<br>• Complex cache implementation<br>• Cache coupled to source<br>• Overkill for simple cases | • Simplify app code<br>• Consistent loading logic<br>• Reusable caching layer<br>• Swap implementations easily                                         | • Different loading strategies<br>• Cache can't access source<br>• Need fine-grained control                                | • Caching frameworks<br>• ORM caching<br>• GraphQL DataLoaders<br>• Hibernate cache                          | • Data loader config<br>• Error handling<br>• Monitoring hit ratio                                           |
-| **Write-Through**       | • Cache & source always consistent<br>• No misses on recent writes<br>• Simple consistency model<br>• Immediate durability<br>• Easier to reason about   | • Slower writes (both systems)<br>• Write penalty if never read<br>• Increased write latency<br>• Source is bottleneck<br>• Both systems must be available       | • Consistency critical<br>• Reads >> writes<br>• Read-after-write pattern<br>• Can tolerate slow writes<br>• Compliance needs                          | • Write performance critical<br>• High write volume<br>• Rarely read back<br>• Expensive writes                             | • Account settings<br>• Shopping carts<br>• Configuration<br>• Transactions<br>• User preferences            | • Transaction management<br>• Rollback strategy<br>• Write amplification<br>• Network failures               |
-| **Write-Behind**        | • Fastest write performance<br>• Reduced source load<br>• Can batch writes<br>• Improved throughput<br>• Better resource use                             | • Data loss risk (cache crash)<br>• Temporary inconsistency<br>• Complex error handling<br>• Monitor queue depth<br>• Harder debugging                           | • Write performance critical<br>• Tolerate eventual consistency<br>• High write volume<br>• Expensive writes<br>• Batch writes possible                | • Need immediate consistency<br>• Cannot tolerate data loss<br>• Need persistence confirmation<br>• Compliance requirements | • Analytics/events<br>• Logging/metrics<br>• Social counters<br>• Dashboards<br>• Page views                 | • Queue management<br>• Failure handling<br>• Data loss risk<br>• Batching strategy<br>• Worker scaling      |
-| **Write-Around**        | • Prevents cache pollution<br>• Faster writes<br>• Better for write-heavy<br>• Simpler write logic<br>• No write amplification                           | • Every post-write read is miss<br>• Higher first read latency<br>• Wasted space if not invalidated<br>• May serve stale data<br>• Not for read-after-write      | • Written once, rarely read<br>• Prevent cache pollution<br>• Write-heavy workloads<br>• Large uncacheable data<br>• Bulk imports                      | • Frequent read-after-write<br>• Balanced read/write<br>• Cache hit rate important                                          | • Logging systems<br>• Bulk imports<br>• Archival<br>• File uploads<br>• Time-series writes                  | • Always invalidate on write<br>• Cache warming for reads<br>• Monitor miss rate                             |
-| **TTL**                 | • Automatic cleanup<br>• Simple implementation<br>• Predictable memory<br>• No stale data after TTL<br>• Works with cache-aside                          | • Stale until expiration<br>• Miss if TTL too short<br>• Wasted space if too long<br>• Cold start after expiry<br>• Hard to choose right TTL                     | • Natural expiration time<br>• Stale data acceptable<br>• Want automatic cleanup<br>• Predictable memory<br>• Sessions/tokens/OTPs                     | • Data never stale<br>• Need immediate invalidation<br>• Hard to determine TTL<br>• Unpredictable access                    | • Sessions (30min)<br>• Rate limits (1min)<br>• OTP codes (5min)<br>• OAuth tokens (1hr)<br>• Product prices | • TTL selection<br>• Sliding expiration<br>• TTL jitter<br>• Stale-while-revalidate                          |
-| **LRU/LFU**             | • Automatic memory mgmt<br>• Keeps hot data<br>• No code changes<br>• Prevents OOM<br>• Adapts to patterns                                               | • May evict needed data<br>• Calculation overhead<br>• Requires tuning maxmemory<br>• May cause misses<br>• Not for guaranteed caching                           | • Limited memory<br>• Prevent OOM errors<br>• Access favors hot data<br>• Automatic preferred<br>• Unpredictable data size                             | • All data equally important<br>• Need deterministic caching<br>• Very small cache<br>                                      | Uniformly random access                                                                                      | • Shared Redis instances<br>• Multi-tenant caching<br>• Hot data retention<br>• CDN<br>• Query caching       | • Memory sizing<br>• Policy selection<br>• Monitoring evictions<br>• Combine with TTL         |
-| **Cache Warming**       | • Eliminates cold start<br>• Consistent performance<br>• Better UX<br>• Reduced post-deploy load<br>• Off-peak warming                                   | • Startup overhead<br>• May waste space<br>• Need access pattern knowledge<br>• May be stale immediately<br>• Identify what to warm                              | • Predictable access<br>• Avoid cold start<br>• After deployment<br>                                                                                   | Scheduled warming<br>• Critical always-fast data                                                                            | • Unpredictable patterns<br>• Very limited space<br>• Frequently changing data<br>• Warming cost > miss cost | • App deployment<br>• Popular products<br>• Trending content<br>• VIP users<br>• Nav menus                   | • What to warm<br>• When to warm<br>• How much<br>• TTL on warmed data<br>• Monitor warming   |
-| **Refresh-Ahead**       | • Consistent fast performance<br>• No miss penalty<br>• Always fresh hot data<br>• Smooth UX<br>• Prevents herd on expiry                                | • Increased load<br>• May refresh unused data<br>• Complex implementation<br>• Track refreshing keys<br>• Need background workers                                | • Expensive must be fast<br>• Hot data frequent access<br>• Cannot tolerate miss penalty<br>• Stale acceptable temporarily<br>• Read-heavy predictable | • Rarely accessed<br>• Real-time accuracy needed<br>• Very expensive refresh<br>                                            | Low traffic                                                                                                  | • Dashboard metrics<br>• Popular API endpoints<br>• Recommendations<br>• Activity feeds<br>• Common searches | • Refresh threshold<br>• Prevent multiple refreshes<br>• Monitoring<br>• Combine with warming |
-| **Stampede Prevention** | • Prevents thundering herd<br>• Dramatically reduces load<br>• One computation<br>• Protects database<br>• Works across servers                          | • Waiting requests lag<br>• Lock contention<br>• Complex error handling<br>• Lock failure delays all<br>• Tune lock timeout                                      | • Very expensive ops (seconds)<br>• High concurrency<br>• Popular data<br>• Backend can't handle load<br>• Rare but catastrophic misses                | • Fast ops (<100ms)<br>• Low concurrency<br>• Latency unacceptable<br>• Idempotent cheap ops                                | • Analytics reports<br>• Search indexing<br>• ML inference<br>• Complex dashboards<br>• Trending APIs        | • Lock timeout tuning<br>• Retry strategy<br>• Monitoring<br>• Combine with refresh-ahead                    |
+| Pattern                 | Pros                                                                                                                                                         | Cons                                                                                                                                                             | When to Use                                                                                                                                            | When NOT to Use                                                                                                             | Real-World Use Cases                                                                                         | Key Considerations                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| **Cache-Aside**         | • Simple to implement<br>• Only requested data cached<br>• Full application control<br>• Works with any data source<br>• Cache failure doesn't break app     | • Cache miss penalty (first request slow)<br>• Potential stale data<br>• Tight coupling to cache<br>• Each miss hits source<br>• Three round trips on miss       | • Read-heavy workloads<br>• Acceptable cache misses<br>• Need full control<br>• Different data requirements<br>• Default choice                        | • Need guaranteed consistency<br>• Cache misses unacceptable<br>• App should be cache-agnostic                              | • Product catalogs<br>• User profiles<br>• CMS articles<br>• API responses<br>• DNS lookups                  | • Invalidation strategy<br>• Cache key design<br>• Serialization format<br>• Error handling                  |
+| **Read-Through**        | • Cleaner app code<br>• Consistent interface<br>• Easier testing<br>• Centralized logic<br>• Easy to add features                                            | • Cache must know data loading<br>• Less flexible than cache-aside<br>• Complex cache implementation<br>• Cache coupled to source<br>• Overkill for simple cases | • Simplify app code<br>• Consistent loading logic<br>• Reusable caching layer<br>• Swap implementations easily                                         | • Different loading strategies<br>• Cache can't access source<br>• Need fine-grained control                                | • Caching frameworks<br>• ORM caching<br>• GraphQL DataLoaders<br>• Hibernate cache                          | • Data loader config<br>• Error handling<br>• Monitoring hit ratio                                           |
+| **Write-Through**       | • Cache & source always consistent<br>• No misses on recent writes<br>• Simple consistency model<br>• Immediate durability<br>• Easier to reason about       | • Slower writes (both systems)<br>• Write penalty if never read<br>• Increased write latency<br>• Source is bottleneck<br>• Both systems must be available       | • Consistency critical<br>• Reads >> writes<br>• Read-after-write pattern<br>• Can tolerate slow writes<br>• Compliance needs                          | • Write performance critical<br>• High write volume<br>• Rarely read back<br>• Expensive writes                             | • Account settings<br>• Shopping carts<br>• Configuration<br>• Transactions<br>• User preferences            | • Transaction management<br>• Rollback strategy<br>• Write amplification<br>• Network failures               |
+| **Write-Behind**        | • Fastest write performance<br>• Reduced source load<br>• Can batch writes<br>• Improved throughput<br>• Better resource use                                 | • Data loss risk (cache crash)<br>• Temporary inconsistency<br>• Complex error handling<br>• Monitor queue depth<br>• Harder debugging                           | • Write performance critical<br>• Tolerate eventual consistency<br>• High write volume<br>• Expensive writes<br>• Batch writes possible                | • Need immediate consistency<br>• Cannot tolerate data loss<br>• Need persistence confirmation<br>• Compliance requirements | • Analytics/events<br>• Logging/metrics<br>• Social counters<br>• Dashboards<br>• Page views                 | • Queue management<br>• Failure handling<br>• Data loss risk<br>• Batching strategy<br>• Worker scaling      |
+| **Write-Around**        | • Prevents cache pollution<br>• Faster writes<br>• Better for write-heavy<br>• Simpler write logic<br>• No write amplification                               | • Every post-write read is miss<br>• Higher first read latency<br>• Wasted space if not invalidated<br>• May serve stale data<br>• Not for read-after-write      | • Written once, rarely read<br>• Prevent cache pollution<br>• Write-heavy workloads<br>• Large uncacheable data<br>• Bulk imports                      | • Frequent read-after-write<br>• Balanced read/write<br>• Cache hit rate important                                          | • Logging systems<br>• Bulk imports<br>• Archival<br>• File uploads<br>• Time-series writes                  | • Always invalidate on write<br>• Cache warming for reads<br>• Monitor miss rate                             |
+| **TTL**                 | • Automatic cleanup<br>• Simple implementation<br>• Predictable memory<br>• No stale data after TTL<br>• Works with cache-aside                              | • Stale until expiration<br>• Miss if TTL too short<br>• Wasted space if too long<br>• Cold start after expiry<br>• Hard to choose right TTL                     | • Natural expiration time<br>• Stale data acceptable<br>• Want automatic cleanup<br>• Predictable memory<br>• Sessions/tokens/OTPs                     | • Data never stale<br>• Need immediate invalidation<br>• Hard to determine TTL<br>• Unpredictable access                    | • Sessions (30min)<br>• Rate limits (1min)<br>• OTP codes (5min)<br>• OAuth tokens (1hr)<br>• Product prices | • TTL selection<br>• Sliding expiration<br>• TTL jitter<br>• Stale-while-revalidate                          |
+| **LRU/LFU**             | • Automatic memory mgmt<br>• Keeps hot data<br>• No code changes<br>• Prevents OOM<br>• Adapts to patterns                                                   | • May evict needed data<br>• Calculation overhead<br>• Requires tuning maxmemory<br>• May cause misses<br>• Not for guaranteed caching                           | • Limited memory<br>• Prevent OOM errors<br>• Access favors hot data<br>• Automatic preferred<br>• Unpredictable data size                             | • All data equally important<br>• Need deterministic caching<br>• Very small cache<br>                                      | Uniformly random access                                                                                      | • Shared Redis instances<br>• Multi-tenant caching<br>• Hot data retention<br>• CDN<br>• Query caching       | • Memory sizing<br>• Policy selection<br>• Monitoring evictions<br>• Combine with TTL         |
+| **Cache Warming**       | • Eliminates cold start<br>• Consistent performance<br>• Better UX<br>• Reduced post-deploy load<br>• Off-peak warming                                       | • Startup overhead<br>• May waste space<br>• Need access pattern knowledge<br>• May be stale immediately<br>• Identify what to warm                              | • Predictable access<br>• Avoid cold start<br>• After deployment<br>                                                                                   | Scheduled warming<br>• Critical always-fast data                                                                            | • Unpredictable patterns<br>• Very limited space<br>• Frequently changing data<br>• Warming cost > miss cost | • App deployment<br>• Popular products<br>• Trending content<br>• VIP users<br>• Nav menus                   | • What to warm<br>• When to warm<br>• How much<br>• TTL on warmed data<br>• Monitor warming   |
+| **Refresh-Ahead**       | • Consistent fast performance<br>• No miss penalty<br>• Always fresh hot data<br>• Smooth UX<br>• Prevents herd on expiry                                    | • Increased load<br>• May refresh unused data<br>• Complex implementation<br>• Track refreshing keys<br>• Need background workers                                | • Expensive must be fast<br>• Hot data frequent access<br>• Cannot tolerate miss penalty<br>• Stale acceptable temporarily<br>• Read-heavy predictable | • Rarely accessed<br>• Real-time accuracy needed<br>• Very expensive refresh<br>                                            | Low traffic                                                                                                  | • Dashboard metrics<br>• Popular API endpoints<br>• Recommendations<br>• Activity feeds<br>• Common searches | • Refresh threshold<br>• Prevent multiple refreshes<br>• Monitoring<br>• Combine with warming |
+| **Stampede Prevention** | • Prevents thundering herd<br>• Dramatically reduces load<br>• One computation<br>• Protects database<br>• Works across servers<br>• Pub/Sub instant wake-up | • Waiting requests lag<br>• Lock contention<br>• Complex error handling<br>• Lock failure delays all<br>• Tune lock timeout<br>• Pub/Sub subscription timing     | • Very expensive ops (>2 seconds)<br>• High concurrency (>100 req)<br>• Popular data<br>• Backend can't handle load<br>• Rare but catastrophic misses  | • Fast ops (<100ms)<br>• Low concurrency<br>• Latency unacceptable<br>• Idempotent cheap ops                                | • Analytics reports<br>• Search indexing<br>• ML inference<br>• Complex dashboards<br>• Trending APIs        | • Lock timeout tuning<br>• Pub/Sub message handling<br>• Monitoring<br>• Combine with refresh-ahead          |
 
 ---
 

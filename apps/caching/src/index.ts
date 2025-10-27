@@ -87,6 +87,23 @@ async function startServer() {
       console.log(
         `    GET    http://localhost:${PORT}/api/advanced-patterns/cache-warming/:key`
       );
+      console.log(`  Refresh-Ahead:`);
+      console.log(
+        `    GET    http://localhost:${PORT}/api/advanced-patterns/refresh-ahead/:key`
+      );
+      console.log(
+        `    GET    http://localhost:${PORT}/api/advanced-patterns/refresh-ahead/:key/status`
+      );
+      console.log(
+        `    DELETE http://localhost:${PORT}/api/advanced-patterns/refresh-ahead/:key`
+      );
+      console.log(`  Stampede Prevention:`);
+      console.log(
+        `    GET    http://localhost:${PORT}/api/advanced-patterns/stampede-prevention/:key`
+      );
+      console.log(
+        `    DELETE http://localhost:${PORT}/api/advanced-patterns/stampede-prevention/:key`
+      );
     });
   } catch (error) {
     console.error('Failed to start server:', error);

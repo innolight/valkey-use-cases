@@ -1,16 +1,16 @@
 import { Router, Request, Response } from 'express';
 import { CacheWarmingService } from '../services/advanced/cache-warming.service';
 import { RefreshAheadService } from '../services/advanced/refresh-ahead.service';
+import { StampedePreventionService } from '../services/advanced/stampede-prevention.service';
 import { ValkeyClient } from '@valkey-use-cases/shared';
 
 const router: Router = Router();
 const redis = ValkeyClient.getInstance();
 
-// Initialize cache warming service
-export const cacheWarmingService = new CacheWarmingService(redis);
-
-// Initialize refresh-ahead service
-export const refreshAheadService = new RefreshAheadService(redis);
+// Initialize services
+const cacheWarmingService = new CacheWarmingService(redis);
+const refreshAheadService = new RefreshAheadService(redis);
+const stampedePreventionService = new StampedePreventionService(redis);
 
 /**
  * POST /api/advanced-patterns/cache-warming
@@ -164,4 +164,75 @@ router.delete('/refresh-ahead/:key', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/advanced-patterns/stampede-prevention/:key
+ *
+ * Demonstrates cache stampede prevention pattern.
+ * Prevents multiple concurrent requests from computing the same expensive operation.
+ *
+ * Usage:
+ * - First request acquires lock and computes (2s delay)
+ * - Concurrent requests wait for notification via Pub/Sub
+ * - All requests return same cached result
+ *
+ * Test with concurrent requests:
+ * for i in {1..10}; do curl http://localhost:3002/api/advanced-patterns/stampede-prevention/expensive & done
+ */
+router.get('/stampede-prevention/:key', async (req, res) => {
+  try {
+    const { key } = req.params;
+
+    if (!key) {
+      return res.status(400).json({
+        error: 'Key parameter is required',
+      });
+    }
+
+    const result = await stampedePreventionService.get(key);
+
+    res.json(result);
+  } catch (error) {
+    console.error('[API] Error in stampede prevention endpoint:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * DELETE /api/advanced-patterns/stampede-prevention/:key
+ *
+ * Invalidate cache entry to test stampede scenario again.
+ *
+ * Usage:
+ * curl -X DELETE http://localhost:3002/api/advanced-patterns/stampede-prevention/expensive
+ */
+router.delete('/stampede-prevention/:key', async (req, res) => {
+  try {
+    const { key } = req.params;
+
+    if (!key) {
+      return res.status(400).json({
+        error: 'Key parameter is required',
+      });
+    }
+
+    const deleted = await stampedePreventionService.invalidate(key);
+
+    res.json({
+      success: true,
+      deleted,
+      message: deleted ? 'Cache entry invalidated' : 'Cache entry not found',
+    });
+  } catch (error) {
+    console.error('[API] Error in stampede prevention delete endpoint:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+export { cacheWarmingService };
 export default router;
