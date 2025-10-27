@@ -1,4 +1,4 @@
-import { SimpleMutexLock } from './simple-mutex-lock';
+import { SimpleMutexLock } from './lock.simple-mutex';
 
 /**
  * Result of attempting a mutually exclusive operation

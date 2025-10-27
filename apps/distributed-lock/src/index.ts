@@ -1,6 +1,6 @@
 import express from 'express';
 import { ValkeyClient } from '@valkey-use-cases/shared';
-import { SimpleMutexLock } from './simple-mutex-lock';
+import { SimpleMutexLock } from './lock.simple-mutex';
 import { OperationService } from './service';
 import { createOperationRouter } from './routes';
 
