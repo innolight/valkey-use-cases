@@ -53,10 +53,10 @@ Before diving into patterns, consider these foundational best practices:
 
 This guide covers 10 caching patterns organized into four categories:
 
-1. **Read Patterns**: Cache-Aside (Lazy Loading), Read-Through
-2. **Write Patterns**: Write-Through, Write-Behind (Write-Back), Write-Around
-3. **Eviction & Expiration Strategies**: TTL (Time-To-Live), LRU/LFU Eviction
-4. **Advanced Patterns**: Cache Warming (Pre-loading), Refresh-Ahead, Cache Stampede Prevention
+1. **[Read Patterns](#read-patterns)**: [Cache-Aside](#1-cache-aside-lazy-loading), [Read-Through](#2-read-through)
+2. **[Write Patterns](#write-patterns)**: [Write-Through](#3-write-through), [Write-Behind](#4-write-behind-write-back), [Write-Around](#5-write-around)
+3. **[Eviction & Expiration Strategies](#eviction--expiration-strategies)**: [TTL](#6-ttl-time-to-live), [LRU/LFU Eviction](#7-lrulfu-eviction)
+4. **[Advanced Patterns](#advanced-patterns)**: [Cache Warming](#8-cache-warming-pre-loading), [Refresh-Ahead](#9-refresh-ahead), [Cache Stampede Prevention](#10-cache-stampede-prevention)
 
 ---
 
@@ -306,6 +306,7 @@ Cache expires → 100 concurrent requests → All see cache miss
 #### **1. Lock Acquisition Strategy**
 
 Acquire an exclusive lock using `SET lock:key unique_token NX EX 10`:
+
 - `NX` ensures only one request gets the lock (atomic test-and-set)
 - `EX 10` auto-expires lock after 10s (prevents deadlock if holder crashes)
 - `unique_token` enables safe lock release (only lock owner can delete)
@@ -340,6 +341,7 @@ Request 2-100: Poll cache every 50ms → Eventually see data
 ```
 
 **Implementation:**
+
 ```javascript
 while (!cacheData && attempts < maxAttempts) {
   await sleep(50);
@@ -349,6 +351,7 @@ while (!cacheData && attempts < maxAttempts) {
 ```
 
 **Trade-offs:**
+
 - ✅ Simple: No additional Redis features, predictable behavior
 - ✅ Safe: No message loss or timing edge cases
 - ❌ Network traffic: 100 requests × 40 polls = 4,000 operations
@@ -369,8 +372,9 @@ Request 2-100: SUBSCRIBE "ready:key" → Sleep → Wake instantly on publish
 ```
 
 **Implementation:**
+
 ```javascript
-await new Promise((resolve) => {
+await new Promise(resolve => {
   const subscriber = redis.duplicate();
   subscriber.subscribe(`cache-ready:${key}`);
   subscriber.on('message', () => {
@@ -382,6 +386,7 @@ await new Promise((resolve) => {
 ```
 
 **Trade-offs:**
+
 - ✅ Efficient: ~201 operations (1 lock + 100 subscribe + 100 wake)
 - ✅ Instant wake-up: No latency variance (<5ms)
 - ✅ Scalable: Constant overhead regardless of concurrency
@@ -394,14 +399,14 @@ await new Promise((resolve) => {
 
 ##### **Performance Comparison**
 
-| Metric                                    | Polling               | Pub/Sub               |
-| ----------------------------------------- | --------------------- | --------------------- |
-| **Total Redis ops** (100 req, 2s compute) | ~4,000                | ~201                  |
-| **Wake-up latency**                       | 0-50ms (variable)     | <5ms (instant)        |
-| **CPU usage**                             | High (busy-wait)      | Low (true sleep)      |
-| **Code complexity**                       | Simple (~50 LOC)      | Moderate (~100 LOC)   |
-| **Edge cases**                            | None                  | Subscription timing   |
-| **Scalability**                           | O(n) per request      | O(1) constant         |
+| Metric                                    | Polling           | Pub/Sub             |
+| ----------------------------------------- | ----------------- | ------------------- |
+| **Total Redis ops** (100 req, 2s compute) | ~4,000            | ~201                |
+| **Wake-up latency**                       | 0-50ms (variable) | <5ms (instant)      |
+| **CPU usage**                             | High (busy-wait)  | Low (true sleep)    |
+| **Code complexity**                       | Simple (~50 LOC)  | Moderate (~100 LOC) |
+| **Edge cases**                            | None              | Subscription timing |
+| **Scalability**                           | O(n) per request  | O(1) constant       |
 
 **Implementation Choice:** This project uses **Pub/Sub** because cache stampede prevention targets expensive operations where high concurrency is expected. For simpler scenarios (moderate load, short computes), polling may suffice.
 
