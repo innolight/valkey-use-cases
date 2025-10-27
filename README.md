@@ -20,6 +20,6 @@ The implemented use cases is exposed via REST APIs impletemend in Nodejs.
 
 8. Geospatial Indexing 🗺️: Store and query data based on geographic coordinates to find points of interest within a specific radius.
 
-9. Distributed Lock 🔒: Ensure only one process in a distributed system can access a critical resource at a time.
+9. [Distributed Lock](/apps/distributed-lock/) 🔒: Ensure only one process in a distributed system can access a critical resource at a time.
 
 10. Feature Flags 🚩: Dynamically enable or disable application features in real-time without deploying new code.
