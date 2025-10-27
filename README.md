@@ -4,7 +4,7 @@ This project demonstrates different ways to use ValKey for various use cases.
 
 The implemented use cases is exposed via REST APIs impletemend in Nodejs.
 
-1. Caching 📦: Store the results of expensive operations (like database queries or API calls) to serve future requests much faster.
+1. [Caching](/apps/caching/) 📦: Store the results of expensive operations (like database queries or API calls) to serve future requests much faster.
 
 2. Session Store 👤: Manage user login sessions and temporary user data without overloading your primary database.
 
