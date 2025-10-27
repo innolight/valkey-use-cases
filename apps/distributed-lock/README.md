@@ -144,28 +144,6 @@ Reasoning: If process crashes, lock expires automatically
 4. If acquired → Execute operation → Release lock
 ```
 
-**Implementation Strategy:**
-
-```typescript
-async acquireWithRetry(resource: string, options: {
-  ttlMs: number,
-  maxWaitMs: number,
-  initialDelayMs: number,
-  maxDelayMs: number,
-  backoffMultiplier: number
-}): Promise<AcquireLockResult>
-```
-
-**Backoff Calculation:**
-
-```
-Attempt 1: 50ms
-Attempt 2: 100ms (50 × 2)
-Attempt 3: 200ms (100 × 2)
-Attempt 4: 400ms (200 × 2)
-Attempt 5: 800ms (400 × 2, capped at maxDelayMs)
-```
-
 **Redis Commands:** Same as Simple Mutex, but called repeatedly.
 
 **When to Use:**
@@ -195,18 +173,6 @@ Attempt 5: 800ms (400 × 2, capped at maxDelayMs)
 - ❌ Wastes CPU/network during wait
 - ❌ Thundering herd risk if many clients retry
 - ❌ Latency variance (0ms to maxWaitMs)
-
-**Configuration Example:**
-
-```typescript
-{
-  ttlMs: 30000,           // Lock expires after 30s
-  maxWaitMs: 10000,       // Give up after 10s
-  initialDelayMs: 50,     // Start with 50ms delay
-  maxDelayMs: 1000,       // Cap at 1s between attempts
-  backoffMultiplier: 2    // Double delay each time
-}
-```
 
 ---
 
