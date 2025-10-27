@@ -993,13 +993,6 @@ POST /api/locks/redlock/:resourceId
 # Response 503: {"error": "Quorum not reached", "message": "Unable to acquire lock on majority of instances"}
 ```
 
-### Health Check
-
-```bash
-GET /health
-# Response: {"status": "ok", "service": "distributed-lock"}
-```
-
 ---
 
 ## Running Examples
