@@ -1,4 +1,4 @@
-import { DistributedLockService } from './distributed-lock';
+import { SimpleMutexLock } from './simple-mutex-lock';
 
 /**
  * Result of attempting a mutually exclusive operation
@@ -26,13 +26,13 @@ export interface OperationResult {
  * 4. Handling errors and ensuring cleanup
  */
 export class OperationService {
-  private readonly lockService: DistributedLockService;
+  private readonly lockService: SimpleMutexLock;
   private readonly operationMinDurationMs: number;
   private readonly operationMaxDurationMs: number;
   private readonly lockTtlMs: number;
 
   constructor(options: {
-    lockService: DistributedLockService;
+    lockService: SimpleMutexLock;
     operationMinDurationMs?: number;
     operationMaxDurationMs?: number;
     lockTtlMs?: number;

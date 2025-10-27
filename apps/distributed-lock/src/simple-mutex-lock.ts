@@ -28,7 +28,7 @@ export interface ReleaseLockResult {
  *
  * For stricter guarantees, consider using the Redlock algorithm.
  */
-export class DistributedLockService {
+export class SimpleMutexLock {
   private readonly redis: Redis;
   private readonly keyPrefix: string;
 

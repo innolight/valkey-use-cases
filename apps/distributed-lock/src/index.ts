@@ -1,6 +1,6 @@
 import express from 'express';
 import { ValkeyClient } from '@valkey-use-cases/shared';
-import { DistributedLockService } from './distributed-lock';
+import { SimpleMutexLock } from './simple-mutex-lock';
 import { OperationService } from './service';
 import { createOperationRouter } from './routes';
 
@@ -12,7 +12,7 @@ app.use(express.json());
 const valkeyClient = ValkeyClient.getInstance();
 
 // Initialize distributed lock service
-const lockService = new DistributedLockService({
+const lockService = new SimpleMutexLock({
   redis: valkeyClient,
   keyPrefix: 'distributed-lock:',
 });
