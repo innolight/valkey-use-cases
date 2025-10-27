@@ -1,4 +1,4 @@
-import { SimpleMutexLock } from './lock.simple-mutex';
+import { DistributedLock } from './lock.interface';
 
 /**
  * Result of attempting a mutually exclusive operation
@@ -14,35 +14,44 @@ export interface OperationResult {
   retryAfterMs?: number;
   /** Error message if operation failed */
   error?: string;
+  /** Additional metadata from the lock implementation */
+  metadata?: Record<string, unknown>;
 }
 
 /**
  * Service for performing mutually exclusive operations using distributed locks
  *
- * This service encapsulates the business logic of:
+ * This service is lock-strategy agnostic and works with any implementation
+ * of the DistributedLock interface:
+ * - SimpleMutexLock: Single-instance fail-fast locking
+ * - RedLock: Multi-instance consensus-based locking
+ * - WatchdogLock: Auto-renewing locks for long operations
+ * - etc.
+ *
+ * The service encapsulates the business logic of:
  * 1. Acquiring a distributed lock for a resource
  * 2. Performing a long-running operation
  * 3. Releasing the lock when done
  * 4. Handling errors and ensuring cleanup
  */
 export class OperationService {
-  private readonly lockService: SimpleMutexLock;
+  private readonly lockService: DistributedLock;
   private readonly operationMinDurationMs: number;
   private readonly operationMaxDurationMs: number;
-  private readonly lockTtlMs: number;
+  private readonly lockDurationMs: number;
 
   constructor(options: {
-    lockService: SimpleMutexLock;
+    lockService: DistributedLock;
     operationMinDurationMs?: number;
     operationMaxDurationMs?: number;
-    lockTtlMs?: number;
+    lockDurationMs?: number;
   }) {
     this.lockService = options.lockService;
     // Default: 30-60 second operation (variable duration)
     this.operationMinDurationMs = options.operationMinDurationMs || 10000;
     this.operationMaxDurationMs = options.operationMaxDurationMs || 20000;
     // Default: 20 second TTL with watchdog renewal
-    this.lockTtlMs = options.lockTtlMs || 25000;
+    this.lockDurationMs = options.lockDurationMs || 25000;
   }
 
   /**
@@ -53,6 +62,8 @@ export class OperationService {
    * 2. If successful, executes the operation (simulated long-running task)
    * 3. Releases the lock when done
    * 4. Returns appropriate result based on success/failure/contention
+   *
+   * @param resourceId - The resource identifier to lock
    */
   async doMutuallyExclusiveOperation(
     resourceId: string
@@ -61,7 +72,7 @@ export class OperationService {
       // Attempt to acquire the lock
       const acquireResult = await this.lockService.acquire(
         resourceId,
-        this.lockTtlMs
+        this.lockDurationMs
       );
 
       if (!acquireResult.success) {
@@ -109,6 +120,7 @@ export class OperationService {
           success: true,
           resourceId,
           durationMs: actualDurationMs,
+          metadata: acquireResult.metadata,
         };
       } catch (operationError) {
         // Operation failed - try to release the lock anyway

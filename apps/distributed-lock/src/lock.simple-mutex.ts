@@ -1,22 +1,15 @@
 import { randomBytes } from 'crypto';
 import type Redis from 'ioredis';
-
-export interface AcquireLockResult {
-  success: boolean;
-  /** Unique lock ID if successful, undefined otherwise */
-  lockId?: string;
-  /** Time in milliseconds to wait before retrying if lock acquisition failed */
-  retryAfter?: number;
-}
-
-export interface ReleaseLockResult {
-  success: boolean;
-}
+import {
+  DistributedLock,
+  AcquireLockResult,
+  ReleaseLockResult,
+} from './lock.interface';
 
 /**
- * Service for managing distributed locks using Valkey/Redis
+ * Simple mutex lock implementation for single-instance Redis/Valkey
  *
- * This implementation provides distributed locking:
+ * This implementation provides basic distributed locking:
  * - Lock acquisition using SET with NX (only set if not exists) and PX (TTL in milliseconds)
  * - Atomic lock release using Lua scripts
  * - Fail-fast behavior on contention (no waiting/blocking)
@@ -27,8 +20,10 @@ export interface ReleaseLockResult {
  * another process may acquire the same lock on the promoted replica.
  *
  * For stricter guarantees, consider using the Redlock algorithm.
+ *
+ * @see RedLock for multi-instance distributed locking with stronger guarantees
  */
-export class SimpleMutexLock {
+export class SimpleMutexLock implements DistributedLock {
   private readonly redis: Redis;
   private readonly keyPrefix: string;
 

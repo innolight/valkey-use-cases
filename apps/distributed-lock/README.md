@@ -986,11 +986,11 @@ POST /api/locks/simple/:resourceId
 ### Redlock
 
 ```bash
-# Acquire with multi-instance consensus
+# Execute operation with multi-instance consensus lock
 POST /api/locks/redlock/:resourceId
-Body: {"ttlMs": 10000}
-# Response 200: {"success": true, "acquiredInstances": 3, "totalInstances": 5}
-# Response 503: {"error": "Quorum not reached", "acquiredInstances": 2}
+# Response 200: {"success": true, "resourceId": "critical-resource", "durationMs": 15000}
+# Response 409: {"error": "Resource locked", "retryAfterMs": 12000}
+# Response 503: {"error": "Quorum not reached", "message": "Unable to acquire lock on majority of instances"}
 ```
 
 ### Health Check
@@ -1031,29 +1031,19 @@ curl -X POST http://localhost:3009/api/locks/simple/resource2
 ### Test Redlock (Multi-Instance)
 
 ```bash
-# Start 5 Redis instances (docker-compose)
-docker-compose -f docker-compose.redlock.yml up -d
+# Terminal 1: Acquire lock and hold for operation duration
+curl -X POST http://localhost:3009/api/locks/redlock/critical-resource
+# {"success": true, "resourceId": "critical-resource", "durationMs": 15000}
 
-# Acquire Redlock
-curl -X POST http://localhost:3009/api/locks/redlock/critical-resource \
-  -H "Content-Type: application/json" \
-  -d '{"ttlMs": 10000}'
-# {"success": true, "acquiredInstances": 5, "totalInstances": 5, "elapsedMs": 12}
+# Terminal 2: Concurrent request fails (within operation duration)
+curl -i -X POST http://localhost:3009/api/locks/redlock/critical-resource
+# HTTP/1.1 409 Conflict
+# Retry-After: 18
+# {"error": "Resource locked", "retryAfterMs": 18000}
 
-# Concurrent request fails
-curl -X POST http://localhost:3009/api/locks/redlock/critical-resource \
-  -H "Content-Type: application/json" \
-  -d '{"ttlMs": 10000}'
-# {"error": "Quorum not reached", "acquiredInstances": 0, "required": 3}
-
-# Simulate instance failure
-docker stop redis-instance-2
-
-# Still works (3/5 majority)
-curl -X POST http://localhost:3009/api/locks/redlock/another-resource \
-  -H "Content-Type: application/json" \
-  -d '{"ttlMs": 10000}'
-# {"success": true, "acquiredInstances": 4, "totalInstances": 5}
+# Different resource succeeds immediately
+curl -X POST http://localhost:3009/api/locks/redlock/another-resource
+# {"success": true, "resourceId": "another-resource", "durationMs": 12000}
 ```
 
 ### Redis Command Reference
